@@ -11,15 +11,16 @@ public class User {
     private String mobile; // మొబైల్ నంబర్‌ని ప్రైమరీ కీగా వాడటం
 
     private String name;
-    private String role; // ఉదాహరణకు: "Customer", "ShopOwner", "DeliveryPartner"
+    private String email;
+    private String password; // ⭐ పాస్‌వర్డ్ లాగిన్ కోసం కొత్తగా యాడ్ చేసిన ఫీల్డ్
+    private String role; // "Customer", "ShopOwner", "DeliveryPartner"
     
     @Column(columnDefinition = "LONGTEXT") // ప్రొఫైల్ ఫోటో బేస్64 లేదా URL సేవ్ చేయడానికి
     private String profilePhoto;
     
-    private String otp;
+    private String otp; // ఒకవేళ OTP లాగిన్ కూడా ఉంచాలనుకుంటే ఇది పనిచేస్తుంది
 
-    // ⭐ కస్టమర్ యాప్ కోసం కొత్తగా యాడ్ చేసిన ఫీల్డ్స్:
-    
+    // కస్టమర్ యాప్ కోసం ఫీల్డ్స్:
     private String deliveryAddress; // యూజర్ సేవ్ చేసుకున్న చివరి అడ్రస్
     private Double latitude;        // మ్యాప్ కోసం లైవ్ లాటిట్యూడ్
     private Double longitude;       // మ్యాప్ కోసం లైవ్ లాంగిట్యూడ్
@@ -42,6 +43,22 @@ public class User {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
     }
 
     public String getRole() {

@@ -123,19 +123,17 @@ public class OrderController {
 		}
 
 		String enteredOtp = payload.get("otp");
-		String partnerIdStr = payload.get("partnerId"); // 👈 పార్టనర్ ఐడీని రిసీవ్ చేసుకోవడం
+		String partnerIdStr = payload.get("partnerId");
 
 		if (enteredOtp != null && enteredOtp.equals(order.getDeliveryOtp())) {
 			order.setStatus("Delivered");
 			
-			// ఒకవేళ పార్టనర్ ఐడీ ఉంటే ఆర్డర్‌కి సేవ్ చేయడం
 			if (partnerIdStr != null && !partnerIdStr.isEmpty()) {
 				order.setDeliveryPartnerId(Long.valueOf(partnerIdStr));
 			}
 			
 			orderRepository.save(order);
 			
-			// కస్టమర్‌కి లైవ్ స్టేటస్ పంపడం
 			messagingTemplate.convertAndSend("/topic/order/status/" + id, "Delivered");
 
 			return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Delivery completed successfully!"));
@@ -147,18 +145,17 @@ public class OrderController {
 	// ఆర్డర్ స్టేటస్ అప్‌డేట్ చేయడానికి మరియు కస్టమర్‌కి WebSocket ద్వారా బ్రాడ్‌కాస్ట్ చేయడానికి (PUT API)
 	@PutMapping("/status/{orderId}")
 	public ResponseEntity<?> updateOrderStatus(@PathVariable Long orderId, @RequestParam String status) {
-	    Optional<Order> orderOpt = orderRepository.findById(orderId);
-	    if (orderOpt.isPresent()) {
-	        Order order = orderOpt.get();
-	        order.setStatus(status); 
-	        orderRepository.save(order);
+		Optional<Order> orderOpt = orderRepository.findById(orderId);
+		if (orderOpt.isPresent()) {
+			Order order = orderOpt.get();
+			order.setStatus(status); 
+			orderRepository.save(order);
 
-	        // 🚀 కరెక్ట్ వేరియబుల్ 'order' ఇక్కడ వాడాలి
-	        messagingTemplate.convertAndSend("/topic/delivery-partners", order);
-	        messagingTemplate.convertAndSend("/topic/order/status/" + orderId, status);
+			messagingTemplate.convertAndSend("/topic/delivery-partners", order);
+			messagingTemplate.convertAndSend("/topic/order/status/" + orderId, status);
 
-	        return ResponseEntity.ok(Map.of("status", "success", "message", "Order status updated to " + status));
-	    }
-	    return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
+			return ResponseEntity.ok(Map.of("status", "success", "message", "Order status updated to " + status));
+		}
+		return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
 	}
 }

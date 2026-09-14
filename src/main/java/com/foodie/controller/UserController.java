@@ -76,7 +76,7 @@ public class UserController {
             Path filePath = Paths.get(UPLOAD_DIR + fileName);
             Files.write(filePath, file.getBytes());
 
-            String fileUrl = "http://localhost:8080/api/users/images/" + fileName;
+            String fileUrl = "/api/users/images/" + fileName;
             user.setProfilePhoto(fileUrl);
             userRepository.save(user);
 
