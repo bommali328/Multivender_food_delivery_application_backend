@@ -27,6 +27,9 @@ public class User {
     
     private Boolean isActive = true; // యూజర్ స్టేటస్ (Active/Blocked)
 
+    // 🌟 కొత్తగా యాడ్ చేయవలసిన ఫీల్డ్ (అడ్మిన్ యాప్ & వాలెట్ సింక్ కోసం)
+    private Double walletBalance = 0.0; 
+
     // --- Getters and Setters ---
     
     public String getMobile() {
@@ -115,5 +118,14 @@ public class User {
 
     public void setActive(Boolean active) {
         isActive = active;
+    }
+
+    // 🌟 walletBalance కోసం Getter మరియు Setter
+    public Double getWalletBalance() {
+        return walletBalance;
+    }
+
+    public void setWalletBalance(Double walletBalance) {
+        this.walletBalance = walletBalance;
     }
 }

@@ -36,6 +36,17 @@ public class Order {
     private String status; // Pending, Preparing, Out for Delivery, Delivered
     private String paymentMethod;
     private String deliveryOtp;
+    
+    @Column(name = "promo_code")
+    private String promoCode;
+
+    public String getPromoCode() {
+        return promoCode;
+    }
+
+    public void setPromoCode(String promoCode) {
+        this.promoCode = promoCode;
+    }
 
     // ⭐ డెలివరీ పార్టనర్ అసైన్మెంట్ కోసం కొత్తగా యాడ్ చేసిన ఫీల్డ్
     private Long deliveryPartnerId;

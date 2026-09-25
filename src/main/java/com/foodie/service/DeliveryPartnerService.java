@@ -65,7 +65,7 @@ public class DeliveryPartnerService {
             return null; // ప్రస్తుతం ఎవరూ అందుబాటులో లేరు
         }
 
-        // స్మార్ట్ సార్టింగ్ రూల్స్ (ఎప్లిసిట్ టైప్స్ తో సరిదిద్దబడిన కోడ్):
+        // స్మార్ట్ సార్టింగ్ రూల్స్:
         availablePartners.sort((DeliveryPartner p1, DeliveryPartner p2) -> {
             // నియమం 1: చివరిసారి ఆర్డర్ తీసుకున్న సమయం కంపేర్ చేయడం (FIFO / Idle Time)
             LocalDateTime t1 = p1.getLastOrderAcceptedTime();

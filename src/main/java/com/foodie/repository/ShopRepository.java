@@ -6,5 +6,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ShopRepository extends JpaRepository<Shop, Long> {
+    
+    // మొబైల్ నెంబర్ ద్వారా షాప్ వెతకడానికి
     Shop findByMobile(String mobile);
 }

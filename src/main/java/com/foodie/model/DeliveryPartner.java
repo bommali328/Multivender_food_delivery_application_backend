@@ -15,6 +15,7 @@ public class DeliveryPartner {
     @Column(unique = true)
     private String mobile;
     private String email;
+    private String password; // ⭐ పాస్‌వర్డ్ లాగిన్ కోసం కొత్తగా యాడ్ చేసిన ఫీల్డ్
     private String vehicleType;
     private String bikeNumber;
     private String aadhaarNo;
@@ -30,17 +31,17 @@ public class DeliveryPartner {
     private Double latitude = 0.0;
     private Double longitude = 0.0;
     
-    private boolean isOnline = false;       
-    private boolean isBusy = false; // ప్రస్తుతం వేరే ఆర్డర్‌లో ఉన్నారా లేదా అని చెక్ చేయడానికి
-    private boolean rainSurgeActive = false; 
+    private boolean isOnline = false;        
+    private boolean isBusy = false; 
+    private boolean rainSurgeActive = false;   
     private double walletBalance = 0.0;      
     private double cashInHand = 0.0;
 
-    // --- Smart Assignment Fields (స్మార్ట్ అసైన్‌మెంట్ కోసం కొత్తవి) ---
-    private LocalDateTime lastOrderAcceptedTime; // FIFO / రౌండ్-రాబిన్ కోసం
-    private LocalDateTime onlineStartTime;     // ఆన్‌లైన్‌కి వచ్చి ఎంతసేపు అయింది అని చూడటానికి
-    private double performanceRating = 5.0;    // డెలివరీ రేటింగ్ (5 Stars)
-    private double completionRate = 100.0;     // ఆర్డర్స్ సక్సెస్ పర్సంటేజ్
+    // --- Smart Assignment Fields ---
+    private LocalDateTime lastOrderAcceptedTime; 
+    private LocalDateTime onlineStartTime;     
+    private double performanceRating = 5.0;    
+    private double completionRate = 100.0;     
 
     // --- Document URLs ---
     private String aadhaarUrl;
@@ -48,6 +49,15 @@ public class DeliveryPartner {
     private String licenseUrl;
     private String bikeUrl;
     private String driverPhotoUrl;
+
+    // --- Password Getters and Setters ---
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
 
     // --- Getters and Setters for New Fields ---
 

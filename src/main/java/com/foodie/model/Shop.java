@@ -25,10 +25,10 @@ public class Shop {
     @Column(columnDefinition = "LONGTEXT")
     private String imageUrl; // మెయిన్ / ప్రైమరీ కవర్ ఇమేజ్
     
-    @ElementCollection(fetch = FetchType.EAGER) // 👈 EAGER లోడింగ్ యాడ్ చేయడం వల్ల లేజీ ఇనిషియలైజేషన్ ఎర్రర్ రాదు
+    @ElementCollection(fetch = FetchType.EAGER) // 👈 మళ్లీ EAGER పెట్టాలి
     @CollectionTable(name = "shop_additional_images", joinColumns = @JoinColumn(name = "shop_id"))
     @Column(columnDefinition = "LONGTEXT")
-    private List<String> additionalImages; // మల్టిపుల్ గ్యాలరీ / షాప్ ఫోటోలు
+    private List<String> additionalImages;
     
     private String upiId;
     private String accountNumber;

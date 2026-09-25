@@ -105,7 +105,7 @@ public class ShopController {
         return ResponseEntity.status(404).body("Shop not found");
     }
 
-    // 6. షాప్ మెయిన్ కవర్ ఫోటో మరియు మల్టిపుల్ గ్యాలరీ ఫోటోలను అప్‌లోడ్ / అప్‌డేట్ చేయడానికి
+ // 6. షాప్ మెయిన్ కవర్ ఫోటో మరియు మల్టిపుల్ గ్యాలరీ ఫోటోలను అప్‌లోడ్ / అప్‌డేట్ చేయడానికి
     @PostMapping("/update-images/{id}")
     public ResponseEntity<?> updateShopImages(
             @PathVariable Long id,
@@ -120,7 +120,6 @@ public class ShopController {
         Shop shop = shopOpt.get();
 
         try {
-            // అప్‌లోడ్స్ ఫోల్డర్ లేకపోతే ఆటోమేటిక్‌గా క్రియేట్ చేయడం
             File directory = new File(UPLOAD_DIR);
             if (!directory.exists()) {
                 directory.mkdirs();
@@ -131,7 +130,8 @@ public class ShopController {
                 String mainFileName = System.currentTimeMillis() + "_" + mainImage.getOriginalFilename();
                 Path mainPath = Paths.get(UPLOAD_DIR + mainFileName);
                 Files.write(mainPath, mainImage.getBytes());
-                shop.setImageUrl("http://localhost:8080/uploads/" + mainFileName);
+                // 🛠️ పోర్ట్ 8080 బదులుగా 5080 కి మార్చబడింది
+                shop.setImageUrl("http://localhost:5080/uploads/" + mainFileName);
             }
 
             // మల్టిపుల్ గ్యాలరీ ఫోటోలను సేవ్ చేయడం
@@ -146,7 +146,8 @@ public class ShopController {
                         String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
                         Path path = Paths.get(UPLOAD_DIR + fileName);
                         Files.write(path, file.getBytes());
-                        imageUrls.add("http://localhost:8080/uploads/" + fileName);
+                        // 🛠️ పోర్ట్ 8080 బదులుగా 5080 కి మార్చబడింది
+                        imageUrls.add("http://localhost:5080/uploads/" + fileName);
                     }
                 }
                 shop.setAdditionalImages(imageUrls);

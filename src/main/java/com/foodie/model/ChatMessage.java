@@ -14,13 +14,16 @@ public class ChatMessage {
     private String senderMobile;     // మెసేజ్ పంపిన వారి మొబైల్ నంబర్
     private String senderName;       // పంపిన వారి పేరు (Customer / Shop / Partner)
     
-    @Column(columnDefinition = "TEXT")
-    private String message;          // చాట్ మెసేజ్
+    @Column(columnDefinition = "LONGTEXT") // ✅ ఇమేజ్ డేటా కోసం ఇది చాలా ముఖ్యం
+    private String message;        // చాట్ మెసేజ్
     
     private String senderType;       // "customer", "shop", లేదా "partner"
     private String recipientRole;    // ఎవరికి వెళ్ళాలి: "shop", "partner", లేదా "customer"
     
-    private boolean isRead = false;  // అన్-రీడ్ నోటిఫికేషన్ కౌంట్ కోసం
+    private boolean isRead = false; 
+    
+    
+    // అన్-రీడ్ నోటిఫికేషన్ కౌంట్ కోసం
     private LocalDateTime timestamp = LocalDateTime.now();
 
     // --- Getters and Setters ---

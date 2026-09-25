@@ -12,8 +12,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        config.enableSimpleBroker("/topic");
+        // /topic (broadcasting ki), /queue (user-specific messages ki) enable chestunnam
+        config.enableSimpleBroker("/topic", "/queue");
+        
+        // App destination prefix
         config.setApplicationDestinationPrefixes("/app");
+        
+        // User destination prefix (Swiggy-style direct partner assignment kosam)
+        config.setUserDestinationPrefix("/user");
     }
 
     @Override

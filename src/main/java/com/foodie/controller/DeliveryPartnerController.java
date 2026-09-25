@@ -51,8 +51,63 @@ public class DeliveryPartnerController {
 	// 🛵 PARTNER APP CORE ENDPOINTS
 	// ==========================================
 
-	// 1. డెలివరీ పార్టనర్ లొకేషన్ అప్‌డేట్ చేయడానికి మరియు అడ్మిన్ ఫ్లీట్ మ్యాప్‌కి
-	// / కస్టమర్‌కి బ్రాడ్‌కాస్ట్ చేయడానికి
+	// 🚀 డెలివరీ పార్ట్‌నర్ ప్రొఫైల్ డేటా ఇవ్వడానికి
+	@GetMapping("/partner/profile/{id}")
+	public ResponseEntity<?> getPartnerProfile(@PathVariable Long id) {
+		Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(id);
+		if (partnerOpt.isPresent()) {
+			return ResponseEntity.ok(partnerOpt.get());
+		}
+		return ResponseEntity.status(404).body(Map.of("error", "Partner not found"));
+	}
+
+	// 🌟 1. పార్టనర్ బేసిక్ అప్‌డేట్ కోసం (404 రాకుండా)
+	@PutMapping("/partner/update/{id}")
+	public ResponseEntity<?> updatePartnerBasic(@PathVariable Long id, @RequestBody DeliveryPartner updatedData) {
+		Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(id);
+		if (partnerOpt.isPresent()) {
+			DeliveryPartner partner = partnerOpt.get();
+			if (updatedData.getFullName() != null) partner.setFullName(updatedData.getFullName());
+			if (updatedData.getEmail() != null) partner.setEmail(updatedData.getEmail());
+			if (updatedData.getBikeNumber() != null) partner.setBikeNumber(updatedData.getBikeNumber());
+			deliveryPartnerRepository.save(partner);
+			return ResponseEntity.ok(Map.of("status", "success", "message", "Partner updated successfully"));
+		}
+		return ResponseEntity.status(404).body(Map.of("error", "Partner not found"));
+	}
+
+	// 🌟 2. KYC సబ్మిట్ చేయడానికి (404 రాకుండా)
+	@PostMapping("/partner/kyc/submit/{id}")
+	public ResponseEntity<?> submitPartnerKycDirect(@PathVariable Long id, @RequestBody DeliveryPartner kycData) {
+		Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(id);
+		if (partnerOpt.isPresent()) {
+			DeliveryPartner partner = partnerOpt.get();
+			partner.setAadhaarNo(kycData.getAadhaarNo());
+			partner.setPanNo(kycData.getPanNo());
+			partner.setLicenseNo(kycData.getLicenseNo());
+			partner.setKycStatus("Under Review");
+			deliveryPartnerRepository.save(partner);
+			return ResponseEntity.ok(Map.of("status", "success", "message", "KYC submitted successfully"));
+		}
+		return ResponseEntity.status(404).body(Map.of("error", "Partner not found"));
+	}
+
+	// 🌟 3. బ్యాంక్/UPI అప్‌డేట్ చేయడానికి (404 రాకుండా)
+	@PutMapping("/partner/bank/update/{id}")
+	public ResponseEntity<?> updatePartnerBankDirect(@PathVariable Long id, @RequestBody DeliveryPartner bankData) {
+		Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(id);
+		if (partnerOpt.isPresent()) {
+			DeliveryPartner partner = partnerOpt.get();
+			partner.setBankAccount(bankData.getBankAccount());
+			partner.setIfscCode(bankData.getIfscCode());
+			partner.setUpiId(bankData.getUpiId());
+			deliveryPartnerRepository.save(partner);
+			return ResponseEntity.ok(Map.of("status", "success", "message", "Bank details updated successfully"));
+		}
+		return ResponseEntity.status(404).body(Map.of("error", "Partner not found"));
+	}
+
+	// 1. డెలివరీ పార్టనర్ లొకేషన్ అప్‌డేట్ చేయడానికి
 	@PostMapping("/partner/location/update")
 	public ResponseEntity<?> updateLocation(@RequestBody Map<String, Object> locationData) {
 		try {
@@ -70,20 +125,16 @@ public class DeliveryPartnerController {
 				Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(partnerId);
 				if (partnerOpt.isPresent()) {
 					DeliveryPartner partner = partnerOpt.get();
-					if (lat != null)
-						partner.setLatitude(lat);
-					if (lng != null)
-						partner.setLongitude(lng);
+					if (lat != null) partner.setLatitude(lat);
+					if (lng != null) partner.setLongitude(lng);
 					deliveryPartnerRepository.save(partner);
 				}
 			}
 
-			// ఒకవేళ ఆర్డర్ ఐడీ ఉంటే కస్టమర్‌కి లొకేషన్ వెళుతుంది
 			if (orderId != null && lat != null && lng != null) {
 				messagingTemplate.convertAndSend("/topic/location/" + orderId, (Object) locationData);
 			}
 
-			// 🚀 అడ్మిన్ ఫ్లీట్ ట్రాకింగ్ మ్యాప్ కోసం లైవ్ లొకేషన్ బ్రాడ్‌కాస్ట్ చేయడం
 			if (lat != null && lng != null) {
 				messagingTemplate.convertAndSend("/topic/fleet/tracking", (Object) locationData);
 			}
@@ -94,8 +145,7 @@ public class DeliveryPartnerController {
 		}
 	}
 
-	// 2. పార్టనర్ ప్రొఫైల్ మరియు డాక్యుమెంట్స్ (KYC) ఫైల్స్ తో సహా అప్‌డేట్
-	// చేయడానికి
+	// 2. పార్టనర్ ప్రొఫైల్ మరియు డాక్యుమెంట్స్ (KYC) ఫైల్స్ తో సహా అప్‌డేట్ చేయడానికి
 	@PutMapping("/partner/update-with-docs/{id}")
 	public ResponseEntity<?> updatePartnerWithDocs(@PathVariable Long id,
 			@RequestParam(value = "fullName", required = false) String fullName,
@@ -120,24 +170,15 @@ public class DeliveryPartnerController {
 
 			DeliveryPartner partner = partnerOpt.get();
 
-			if (fullName != null)
-				partner.setFullName(fullName);
-			if (email != null)
-				partner.setEmail(email);
-			if (bikeNumber != null)
-				partner.setBikeNumber(bikeNumber);
-			if (aadhaarNo != null)
-				partner.setAadhaarNo(aadhaarNo);
-			if (panNo != null)
-				partner.setPanNo(panNo);
-			if (licenseNo != null)
-				partner.setLicenseNo(licenseNo);
-			if (bankAccount != null)
-				partner.setBankAccount(bankAccount);
-			if (ifscCode != null)
-				partner.setIfscCode(ifscCode);
-			if (upiId != null)
-				partner.setUpiId(upiId);
+			if (fullName != null) partner.setFullName(fullName);
+			if (email != null) partner.setEmail(email);
+			if (bikeNumber != null) partner.setBikeNumber(bikeNumber);
+			if (aadhaarNo != null) partner.setAadhaarNo(aadhaarNo);
+			if (panNo != null) partner.setPanNo(panNo);
+			if (licenseNo != null) partner.setLicenseNo(licenseNo);
+			if (bankAccount != null) partner.setBankAccount(bankAccount);
+			if (ifscCode != null) partner.setIfscCode(ifscCode);
+			if (upiId != null) partner.setUpiId(upiId);
 
 			File uploadDir = new File(UPLOAD_DIR);
 			if (!uploadDir.exists()) {
@@ -214,8 +255,7 @@ public class DeliveryPartnerController {
 			partner.setOnline(online);
 			deliveryPartnerRepository.save(partner);
 
-			return ResponseEntity
-					.ok(Map.of("isOnline", partner.isOnline(), "message", online ? "Shift started!" : "Shift paused."));
+			return ResponseEntity.ok(Map.of("isOnline", partner.isOnline(), "message", online ? "Shift started!" : "Shift paused."));
 		}
 		return ResponseEntity.status(404).body(Map.of("error", "Partner not found"));
 	}
@@ -224,7 +264,6 @@ public class DeliveryPartnerController {
 	public ResponseEntity<?> toggleRainSurge(@PathVariable Long id, @RequestParam boolean surgeActive) {
 		Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(id);
 		if (partnerOpt.isPresent()) {
-			DeliveryPartner partner = partnerOpt.get();
 			return ResponseEntity.ok(Map.of("rainSurgeActive", surgeActive, "message", "Surge updated"));
 		}
 		return ResponseEntity.status(404).body(Map.of("error", "Partner not found"));
@@ -253,21 +292,30 @@ public class DeliveryPartnerController {
 	
 	@PutMapping("/status/update/{partnerId}")
 	public ResponseEntity<?> updatePartnerOnlineStatus(@PathVariable Long partnerId, @RequestParam boolean isOnline) {
-	    Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(partnerId);
-	    if (partnerOpt.isPresent()) {
-	        DeliveryPartner partner = partnerOpt.get();
-	        partner.setOnline(isOnline); // లేదా setIsOnline(isOnline)
-	        deliveryPartnerRepository.save(partner);
-	        return ResponseEntity.ok(Map.of("status", "success", "isOnline", isOnline));
-	    }
-	    return ResponseEntity.status(404).body(Map.of("error", "Partner not found"));
+		Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(partnerId);
+		if (partnerOpt.isPresent()) {
+			DeliveryPartner partner = partnerOpt.get();
+			partner.setOnline(isOnline);
+			deliveryPartnerRepository.save(partner);
+			return ResponseEntity.ok(Map.of("status", "success", "isOnline", isOnline));
+		}
+		return ResponseEntity.status(404).body(Map.of("error", "Partner not found"));
 	}
 	
+	// 🚀 బెస్ట్ పార్ట్‌నర్‌ని ఫైండ్ చేసి వెబ్‌సాకెట్ ద్వారా ఆర్డర్ నోటిఫికేషన్ పంపే మెథడ్
 	@GetMapping("/partner/find-best")
-	public ResponseEntity<?> findBestPartner(@RequestParam Double shopLat, @RequestParam Double shopLng) {
+	public ResponseEntity<?> findBestPartner(@RequestParam Double shopLat, @RequestParam Double shopLng, @RequestParam(required = false) Long orderId) {
 		try {
 			DeliveryPartner bestPartner = deliveryPartnerService.findBestPartnerForOrder(shopLat, shopLng);
 			if (bestPartner != null) {
+				if (orderId != null) {
+					messagingTemplate.convertAndSend("/topic/partner/" + bestPartner.getId(), Map.of(
+						"type", "NEW_ORDER_ASSIGNED",
+						"orderId", orderId,
+						"message", "కొత్త ఆర్డర్ కేటాయించబడింది!"
+					));
+				}
+
 				return ResponseEntity.ok(Map.of(
 					"status", "success", 
 					"partnerId", bestPartner.getId(), 
