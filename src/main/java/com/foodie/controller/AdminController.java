@@ -42,9 +42,9 @@ public class AdminController {
 
 	@Autowired
 	private DeliveryPartnerRepository deliveryPartnerRepository;
-	
+
 	@Autowired
-    private AdminChatMessageRepository adminChatMessageRepository;
+	private AdminChatMessageRepository adminChatMessageRepository;
 
 	@Autowired
 	private SimpMessagingTemplate messagingTemplate;
@@ -89,24 +89,25 @@ public class AdminController {
 		}
 		return ResponseEntity.status(404).body(Map.of("error", "Partner not found"));
 	}
-	
+
 	// 🌟 అడ్మిన్ ప్యానెల్ నుండి నేరుగా కస్టమర్ వాలెట్ బ్యాలెన్స్ అప్‌డేట్ చేయడానికి
-		@PutMapping("/admin/customer/wallet/{mobile}")
-		public ResponseEntity<?> updateCustomerWallet(@PathVariable String mobile, @RequestBody Map<String, Double> payload) {
-			Optional<User> userOpt = userRepository.findById(mobile);
-			if (userOpt.isPresent()) {
-				User user = userOpt.get();
-				Double amountToAdd = payload.get("amount");
-				if (amountToAdd != null) {
-					double currentBalance = user.getWalletBalance() != null ? user.getWalletBalance() : 0.0;
-					user.setWalletBalance(currentBalance + amountToAdd);
-					userRepository.save(user);
-					return ResponseEntity.ok(Map.of("status", "success", "newBalance", user.getWalletBalance()));
-				}
-				return ResponseEntity.badRequest().body(Map.of("error", "Amount not specified"));
+	@PutMapping("/admin/customer/wallet/{mobile}")
+	public ResponseEntity<?> updateCustomerWallet(@PathVariable String mobile,
+			@RequestBody Map<String, Double> payload) {
+		Optional<User> userOpt = userRepository.findById(mobile);
+		if (userOpt.isPresent()) {
+			User user = userOpt.get();
+			Double amountToAdd = payload.get("amount");
+			if (amountToAdd != null) {
+				double currentBalance = user.getWalletBalance() != null ? user.getWalletBalance() : 0.0;
+				user.setWalletBalance(currentBalance + amountToAdd);
+				userRepository.save(user);
+				return ResponseEntity.ok(Map.of("status", "success", "newBalance", user.getWalletBalance()));
 			}
-			return ResponseEntity.status(404).body(Map.of("error", "Customer not found"));
+			return ResponseEntity.badRequest().body(Map.of("error", "Amount not specified"));
 		}
+		return ResponseEntity.status(404).body(Map.of("error", "Customer not found"));
+	}
 
 	// --- PROMO CODE LOGIC ---
 
@@ -138,14 +139,16 @@ public class AdminController {
 		return ResponseEntity.ok(partners);
 	}
 
-	// 🚀 షాప్స్ అన్నీ అడ్మిన్ కోసం ఫెచ్ చేయడానికి (URL క్లాష్ రాకుండా /admin/shop/all)
+	// 🚀 షాప్స్ అన్నీ అడ్మిన్ కోసం ఫెచ్ చేయడానికి (URL క్లాష్ రాకుండా
+	// /admin/shop/all)
 	@GetMapping("/admin/shop/all")
 	public ResponseEntity<List<Shop>> getAllShopsForAdmin() {
 		List<Shop> shops = shopRepository.findAll();
 		return ResponseEntity.ok(shops);
 	}
 
-	// 🚀 అడ్మిన్ చాట్ కోసం అన్ని కేటగిరీల యూజర్లను (Role బట్టి) ఫెచ్ చేసే ఎండ్‌పాయింట్
+	// 🚀 అడ్మిన్ చాట్ కోసం అన్ని కేటగిరీల యూజర్లను (Role బట్టి) ఫెచ్ చేసే
+	// ఎండ్‌పాయింట్
 	@GetMapping("/admin/chat/users")
 	public ResponseEntity<?> getUsersForAdminChat(@RequestParam("role") String role) {
 		try {
@@ -237,30 +240,31 @@ public class AdminController {
 		return ResponseEntity.ok(Map.of("status", "success", "message",
 				"Commission updated to " + commission + "% for Shop ID: " + shopId));
 	}
-	
+
 	// ✅ WebSocket ద్వారా అడ్మిన్ లేదా షాప్/పార్ట్‌నర్ మెసేజ్ పంపే STOMP Mapping
-    @org.springframework.messaging.handler.annotation.MessageMapping("/admin-partner/send")
-    public void receiveAdminPartnerMessage(AdminChatMessage chatMessage) {
-        try {
-            // మొబైల్ నంబర్ క్లీన్ చేయడం
-            String mob = chatMessage.getPartnerMobile() != null ? chatMessage.getPartnerMobile() : chatMessage.getIdentifier();
-            if (mob != null) {
-                String cleanMob = mob.replaceAll("^(\\+91|91)", "").trim();
-                chatMessage.setPartnerMobile(cleanMob);
-                chatMessage.setIdentifier(cleanMob);
-            }
+	@org.springframework.messaging.handler.annotation.MessageMapping("/admin-partner/send")
+	public void receiveAdminPartnerMessage(AdminChatMessage chatMessage) {
+		try {
+			// మొబైల్ నంబర్ క్లీన్ చేయడం
+			String mob = chatMessage.getPartnerMobile() != null ? chatMessage.getPartnerMobile()
+					: chatMessage.getIdentifier();
+			if (mob != null) {
+				String cleanMob = mob.replaceAll("^(\\+91|91)", "").trim();
+				chatMessage.setPartnerMobile(cleanMob);
+				chatMessage.setIdentifier(cleanMob);
+			}
 
-            // డేటాబేస్‌లో మెసేజ్ సేవ్ చేయడం
-            AdminChatMessage savedMsg = adminChatMessageRepository.save(chatMessage);
+			// డేటాబేస్‌లో మెసేజ్ సేవ్ చేయడం
+			AdminChatMessage savedMsg = adminChatMessageRepository.save(chatMessage);
 
-            // సంబంధిత పార్ట్‌నర్/షాప్ మరియు అడ్మిన్ చాట్ టాపిక్‌కి బ్రాడ్‌కాస్ట్ చేయడం
-            messagingTemplate.convertAndSend("/topic/chat/admin-partner/" + savedMsg.getIdentifier(), savedMsg);
-            messagingTemplate.convertAndSend("/topic/admin/chats", savedMsg);
-            
-        } catch (Exception e) {
-            System.err.println("WebSocket Admin Chat Error: " + e.getMessage());
-        }
-    }
+			// సంబంధిత పార్ట్‌నర్/షాప్ మరియు అడ్మిన్ చాట్ టాపిక్‌కి బ్రాడ్‌కాస్ట్ చేయడం
+			messagingTemplate.convertAndSend("/topic/chat/admin-partner/" + savedMsg.getIdentifier(), savedMsg);
+			messagingTemplate.convertAndSend("/topic/admin/chats", savedMsg);
+
+		} catch (Exception e) {
+			System.err.println("WebSocket Admin Chat Error: " + e.getMessage());
+		}
+	}
 
 	// అన్ని షాప్‌ల కమిషన్ రేట్లు పొందడానికి
 	@GetMapping("/all")
