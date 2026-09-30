@@ -1,6 +1,7 @@
 package com.foodie.controller;
 
 import com.foodie.model.Shop;
+import org.springframework.http.MediaType;
 import com.foodie.repository.ShopRepository;
 import com.foodie.service.ShopService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +31,6 @@ public class ShopController {
 	private static final String UPLOAD_DIR = "uploads/";
 
 	// 1. కొత్త షాప్ రిజిస్ట్రేషన్ (GPS కోఆర్డినేట్స్ & అడ్రస్‌తో సహా)
-	// 1. కొత్త షాప్ రిజిస్ట్రేషన్ (GPS కోఆర్డినేట్స్ & అడ్రస్‌తో సహా)
 	@PostMapping("/register")
 	public ResponseEntity<?> registerShop(@RequestBody Shop shop, @RequestParam(required = false) Long ownerId) {
 		try {
@@ -52,16 +52,16 @@ public class ShopController {
 			Shop savedShop = shopService.registerShop(shop);
 			return ResponseEntity.ok(savedShop);
 		} catch (Exception e) {
-			e.printStackTrace(); // ఇంటెలిజెడబ్ల్యూ కన్సోల్‌లో అసలు ఎర్రర్ ఏంటో ప్రింట్ అవుతుంది
+			e.printStackTrace();
 			return ResponseEntity.status(500).body("Registration Error: " + e.getMessage());
 		}
 	}
 
-	// 2. అన్ని షాప్స్‌ను కస్టమర్ యాప్‌కి పంపడానికి
-	@GetMapping("/all")
+	// 2. అన్ని షాప్స్‌ను కస్టమర్ యాప్‌కి పంపడానికి (సర్వీస్ ద్వారా కాల్ చేయబడుతుంది)
+	@GetMapping(value = "/all", produces = MediaType.APPLICATION_JSON_VALUE)
 	public ResponseEntity<List<Shop>> getAllShops() {
-		List<Shop> shops = shopRepository.findAll();
-		return ResponseEntity.ok(shops);
+	    List<Shop> shops = shopService.getAllShops();
+	    return ResponseEntity.ok(shops);
 	}
 
 	// 3. షాప్ ఐడీ ద్వారా ప్రొఫైల్ వివరాలు పొందడానికి
@@ -84,8 +84,7 @@ public class ShopController {
 		return ResponseEntity.status(404).body("Shop not found");
 	}
 
-	// 5. షాప్ ప్రొఫైల్ ఎడిట్ / అప్‌డేట్ చేయడానికి (Name, Mobile, Address, FSSAI
-	// మొదలైనవి)
+	// 5. షాప్ ప్రొఫైల్ ఎడిట్ / అప్‌డేట్ చేయడానికి
 	@PutMapping("/profile/{id}")
 	public ResponseEntity<?> updateShopProfile(@PathVariable Long id, @RequestBody Shop updatedDetails) {
 		Optional<Shop> shopOpt = shopRepository.findById(id);
@@ -113,8 +112,7 @@ public class ShopController {
 		return ResponseEntity.status(404).body("Shop not found");
 	}
 
-	// 6. షాప్ మెయిన్ కవర్ ఫోటో మరియు మల్టిపుల్ గ్యాలరీ ఫోటోలను అప్‌లోడ్ / అప్‌డేట్
-	// చేయడానికి
+	// 6. షాప్ ఫోటోలు అప్‌లోడ్ చేయడానికి
 	@PostMapping("/update-images/{id}")
 	public ResponseEntity<?> updateShopImages(@PathVariable Long id,
 			@RequestParam(value = "mainImage", required = false) MultipartFile mainImage,
@@ -138,11 +136,10 @@ public class ShopController {
 				String mainFileName = System.currentTimeMillis() + "_" + mainImage.getOriginalFilename();
 				Path mainPath = Paths.get(UPLOAD_DIR + mainFileName);
 				Files.write(mainPath, mainImage.getBytes());
-				// 🛠️ పోర్ట్ 8080 బదులుగా 5080 కి మార్చబడింది
 				shop.setImageUrl("/uploads/" + mainFileName);
 			}
 
-			// మల్టిపుల్ గ్యాలరీ ఫోటోలను సేవ్ చేయడం
+			// గ్యాలరీ ఫోటోలను సేవ్ చేయడం
 			if (galleryImages != null && !galleryImages.isEmpty()) {
 				List<String> imageUrls = shop.getAdditionalImages();
 				if (imageUrls == null) {
@@ -154,7 +151,6 @@ public class ShopController {
 						String fileName = System.currentTimeMillis() + "_" + file.getOriginalFilename();
 						Path path = Paths.get(UPLOAD_DIR + fileName);
 						Files.write(path, file.getBytes());
-						// 🛠️ పోర్ట్ 8080 బదులుగా 5080 కి మార్చబడింది
 						imageUrls.add("/uploads/" + fileName);
 					}
 				}

@@ -5,6 +5,7 @@ import com.foodie.repository.ShopRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -28,6 +29,10 @@ public class ShopService {
             return shopRepository.save(shop);
         }
         return null;
+    }
+    
+    public List<Shop> getAllShops() {
+        return shopRepository.findAll();
     }
 
     public Optional<Shop> getShopById(Long id) {

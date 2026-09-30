@@ -4,8 +4,9 @@ import jakarta.persistence.*;
 import java.util.List;
 
 @Entity
-@Table(name = "shops")
+@Table(name = "shop") // టేబుల్ పేరు 'shop' గా ఉంటే డేటాబేస్ తో పర్‌ఫెక్ట్‌గా మ్యాచ్ అవుతుంది
 public class Shop {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -17,7 +18,10 @@ public class Shop {
     private String mobile;
     
     private String password;
+    
+    @Column(length = 500)
     private String address;
+    
     private String category;
     private String latitude;
     private String longitude;
@@ -25,7 +29,7 @@ public class Shop {
     @Column(columnDefinition = "LONGTEXT")
     private String imageUrl; // మెయిన్ / ప్రైమరీ కవర్ ఇమేజ్
     
-    @ElementCollection(fetch = FetchType.EAGER) // 👈 మళ్లీ EAGER పెట్టాలి
+    @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "shop_additional_images", joinColumns = @JoinColumn(name = "shop_id"))
     @Column(columnDefinition = "LONGTEXT")
     private List<String> additionalImages;
@@ -40,7 +44,7 @@ public class Shop {
     
     private boolean isOpen = true;
     
-    // అడ్మిన్ ప్యానెల్ కోసం యాక్టివ్ / డియాక్టివ్ స్టేటస్ ఫీల్డ్
+    // అడ్మిన్ ప్యానెల్ కోసం యాక్టివ్ / డియాక్టివ్ స్టేటస్ ఫీల్ड
     private boolean active = true;
 
     // Getters and Setters
