@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
 
@@ -27,7 +28,10 @@ public class AuthController {
 	@Autowired
 	private DeliveryPartnerRepository partnerRepository;
 
-	// 1. రిజిస్ట్రేషన్ ఏపీఐ (Register Partner / User / Shop)
+	// ✅ 100% Free WhatsApp PIN storage for forgot password
+	private final Map<String, String> whatsappPinStorage = new HashMap<>();
+
+	// 1. రిజిస్ట్రేషన్ ఏపీఐ (Register Partner / User / Shop)[cite: 5]
 	@PostMapping("/register")
 	public ResponseEntity<?> registerUser(@RequestBody AuthRequest request) {
 		try {
@@ -107,7 +111,7 @@ public class AuthController {
 		}
 	}
 
-	// 2. పాస్‌వర్డ్ లాగిన్ ఏపీఐ
+	// 2. పాస్‌వర్డ్ లాగిన్ ఏపీఐ[cite: 5]
 	@PostMapping("/login")
 	public ResponseEntity<?> loginWithPassword(@RequestBody AuthRequest request) {
 		try {
@@ -160,16 +164,65 @@ public class AuthController {
 		}
 	}
 
-	// 3. ఫర్గాట్ / రీసెట్ పాస్‌వర్డ్ ఏపీఐ (Fixed with newPassword support)
+	// 3. ఫర్గాట్ పాస్‌వర్డ్ - వాట్సాప్‌కి 4 డిజిట్ పిన్ పంపడానికి (Free of cost)
 	@PostMapping("/forgot-password")
 	public ResponseEntity<?> forgotPassword(@RequestBody AuthRequest request) {
 		try {
 			String mobile = request.getMobile();
-			String newPassword = request.getNewPassword(); // 👈 Fixed method to read newPassword
 			String role = request.getRole() != null ? request.getRole().toLowerCase() : "customer";
 
-			if (mobile == null || mobile.isEmpty() || newPassword == null || newPassword.isEmpty()) {
-				return ResponseEntity.badRequest().body(Map.of("error", "Mobile and new password are required"));
+			if (mobile == null || mobile.isEmpty()) {
+				return ResponseEntity.badRequest().body(Map.of("error", "Mobile number is required"));
+			}
+
+			boolean exists = false;
+			if (role.equalsIgnoreCase("customer")) {
+				exists = (userRepository.findFirstByMobile(mobile) != null);
+			} else if (role.equalsIgnoreCase("shop")) {
+				exists = (shopRepository.findByMobile(mobile) != null);
+			} else if (role.equalsIgnoreCase("partner")) {
+				exists = (partnerRepository.findByMobile(mobile).isPresent());
+			}
+
+			if (!exists) {
+				return ResponseEntity.status(404).body(Map.of("error", "Mobile number not registered!"));
+			}
+
+			// 4 అంకెల పిన్ జనరేట్ చేయడం (0000 - 9999)
+			String pin = String.format("%04d", new Random().nextInt(10000));
+			whatsappPinStorage.put(mobile, pin);
+
+			// ఉచిత వాట్సాప్ లింక్ (Click to chat)
+			String whatsappUrl = "https://wa.me/91" + mobile + "?text=Your%20Foodiee%20Password%20Reset%20PIN%20is:%20" + pin;
+
+			return ResponseEntity.ok(Map.of(
+				"status", "SUCCESS",
+				"message", "4-digit PIN generated for WhatsApp successfully!",
+				"whatsappRedirectUrl", whatsappUrl,
+				"debugPin", pin // డెవలప్‌మెంట్ సమయంలో టెస్ట్ చేయడానికి
+			));
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			return ResponseEntity.status(500).body(Map.of("error", "Server error: " + e.getMessage()));
+		}
+	}
+
+	// 4. పిన్ వెరిఫై చేసి కొత్త పాస్‌వర్డ్ సెట్ చేయడానికి (Reset Password)
+	@PostMapping("/reset-password")
+	public ResponseEntity<?> resetPassword(@RequestBody AuthRequest request) {
+		try {
+			String mobile = request.getMobile();
+			String pin = request.getOtp(); // 4-digit PIN
+			String newPassword = request.getNewPassword();
+			String role = request.getRole() != null ? request.getRole().toLowerCase() : "customer";
+
+			if (mobile == null || mobile.isEmpty() || pin == null || pin.isEmpty() || newPassword == null || newPassword.isEmpty()) {
+				return ResponseEntity.badRequest().body(Map.of("error", "Mobile, PIN and new password are required"));
+			}
+
+			if (!whatsappPinStorage.containsKey(mobile) || !whatsappPinStorage.get(mobile).equals(pin)) {
+				return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired 4-digit PIN!"));
 			}
 
 			if (newPassword.trim().length() < 4) {
@@ -183,7 +236,6 @@ public class AuthController {
 				}
 				user.setPassword(newPassword.trim());
 				userRepository.save(user);
-				return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Password updated successfully in database!"));
 			} 
 			else if (role.equalsIgnoreCase("shop")) {
 				Shop shop = shopRepository.findByMobile(mobile);
@@ -192,7 +244,6 @@ public class AuthController {
 				}
 				shop.setPassword(newPassword.trim());
 				shopRepository.save(shop);
-				return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Password updated successfully in database!"));
 			} 
 			else if (role.equalsIgnoreCase("partner")) {
 				DeliveryPartner partner = partnerRepository.findByMobile(mobile).orElse(null);
@@ -201,10 +252,13 @@ public class AuthController {
 				}
 				partner.setPassword(newPassword.trim());
 				partnerRepository.save(partner);
-				return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Password updated successfully in database!"));
 			}
 
-			return ResponseEntity.status(400).body(Map.of("error", "Invalid role"));
+			// సక్సెస్ అయిన తర్వాత స్టోరేజ్ నుండి పిన్ తొలగించడం
+			whatsappPinStorage.remove(mobile);
+
+			return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Password updated successfully via WhatsApp PIN!"));
+
 		} catch (Exception e) {
 			e.printStackTrace();
 			return ResponseEntity.status(500).body(Map.of("error", "Server error: " + e.getMessage()));
@@ -333,7 +387,7 @@ class AuthRequest {
 	private String vehicleType;
 	private String bikeNumber;
 	private String password;
-	private String newPassword; // 👈 Added to receive newPassword from frontend
+	private String newPassword; 
 	private String category; 
 
 	public String getMobile() { return mobile; }
@@ -357,7 +411,6 @@ class AuthRequest {
 	public String getPassword() { return password; }
 	public void setPassword(String password) { this.password = password; }
 
-	// 👈 Fallback support for newPassword getter
 	public String getNewPassword() { 
 		return newPassword != null ? newPassword : password; 
 	}
