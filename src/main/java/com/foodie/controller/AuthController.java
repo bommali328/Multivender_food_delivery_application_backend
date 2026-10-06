@@ -164,106 +164,131 @@ public class AuthController {
 		}
 	}
 
-	// 3. ఫర్గాట్ పాస్‌వర్డ్ - వాట్సాప్‌కి 4 డిజిట్ పిన్ పంపడానికి (Free of cost)
-	@PostMapping("/forgot-password")
-	public ResponseEntity<?> forgotPassword(@RequestBody AuthRequest request) {
-		try {
-			String mobile = request.getMobile();
-			String role = request.getRole() != null ? request.getRole().toLowerCase() : "customer";
+	// 3. ఫర్గాట్ పాస్‌వర్డ్ - డేటాబేస్‌లో పిన్ సేవ్ చేయడానికి
+		@PostMapping("/forgot-password")
+		public ResponseEntity<?> forgotPassword(@RequestBody AuthRequest request) {
+			try {
+				String mobile = request.getMobile();
+				String role = request.getRole() != null ? request.getRole().toLowerCase() : "customer";
 
-			if (mobile == null || mobile.isEmpty()) {
-				return ResponseEntity.badRequest().body(Map.of("error", "Mobile number is required"));
-			}
+				if (mobile == null || mobile.isEmpty()) {
+					return ResponseEntity.badRequest().body(Map.of("error", "Mobile number is required"));
+				}
 
-			boolean exists = false;
-			if (role.equalsIgnoreCase("customer")) {
-				exists = (userRepository.findFirstByMobile(mobile) != null);
-			} else if (role.equalsIgnoreCase("shop")) {
-				exists = (shopRepository.findByMobile(mobile) != null);
-			} else if (role.equalsIgnoreCase("partner")) {
-				exists = (partnerRepository.findByMobile(mobile).isPresent());
-			}
+				// 4 అంకెల పిన్ జనరేట్ చేయడం (0000 - 9999)
+				String pin = String.format("%04d", new Random().nextInt(10000));
 
-			if (!exists) {
-				return ResponseEntity.status(404).body(Map.of("error", "Mobile number not registered!"));
-			}
+				boolean found = false;
+				if (role.equalsIgnoreCase("customer")) {
+					User user = userRepository.findFirstByMobile(mobile);
+					if (user != null) {
+						user.setOtp(pin); // డేటాబేస్‌లో పిన్ సేవ్ చేస్తున్నాం
+						userRepository.save(user);
+						found = true;
+					}
+				} else if (role.equalsIgnoreCase("shop")) {
+					Shop shop = shopRepository.findByMobile(mobile);
+					if (shop != null) {
+						shop.setOtp(pin); // డేటాబేస్‌లో పిన్ సేవ్ చేస్తున్నాం
+						shopRepository.save(shop);
+						found = true;
+					}
+				} else if (role.equalsIgnoreCase("partner")) {
+					DeliveryPartner partner = partnerRepository.findByMobile(mobile).orElse(null);
+					if (partner != null) {
+						partner.setOtp(pin); // డేటాబేస్‌‌లో పిన్ సేవ్ చేస్తున్నాం
+						partnerRepository.save(partner);
+						found = true;
+					}
+				}
 
-			// 4 అంకెల పిన్ జనరేట్ చేయడం (0000 - 9999)
-			String pin = String.format("%04d", new Random().nextInt(10000));
-			whatsappPinStorage.put(mobile, pin);
-
-			// ఉచిత వాట్సాప్ లింక్ (Click to chat)
-			String whatsappUrl = "https://wa.me/91" + mobile + "?text=Your%20Foodiee%20Password%20Reset%20PIN%20is:%20" + pin;
-
-			return ResponseEntity.ok(Map.of(
-				"status", "SUCCESS",
-				"message", "4-digit PIN generated for WhatsApp successfully!",
-				"whatsappRedirectUrl", whatsappUrl,
-				"debugPin", pin // డెవలప్‌మెంట్ సమయంలో టెస్ట్ చేయడానికి
-			));
-
-		} catch (Exception e) {
-			e.printStackTrace();
-			return ResponseEntity.status(500).body(Map.of("error", "Server error: " + e.getMessage()));
-		}
-	}
-
-	// 4. పిన్ వెరిఫై చేసి కొత్త పాస్‌వర్డ్ సెట్ చేయడానికి (Reset Password)
-	@PostMapping("/reset-password")
-	public ResponseEntity<?> resetPassword(@RequestBody AuthRequest request) {
-		try {
-			String mobile = request.getMobile();
-			String pin = request.getOtp(); // 4-digit PIN
-			String newPassword = request.getNewPassword();
-			String role = request.getRole() != null ? request.getRole().toLowerCase() : "customer";
-
-			if (mobile == null || mobile.isEmpty() || pin == null || pin.isEmpty() || newPassword == null || newPassword.isEmpty()) {
-				return ResponseEntity.badRequest().body(Map.of("error", "Mobile, PIN and new password are required"));
-			}
-
-			if (!whatsappPinStorage.containsKey(mobile) || !whatsappPinStorage.get(mobile).equals(pin)) {
-				return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired 4-digit PIN!"));
-			}
-
-			if (newPassword.trim().length() < 4) {
-				return ResponseEntity.badRequest().body(Map.of("error", "Password must be at least 4 characters long."));
-			}
-
-			if (role.equalsIgnoreCase("customer")) {
-				User user = userRepository.findFirstByMobile(mobile);
-				if (user == null) {
+				if (!found) {
 					return ResponseEntity.status(404).body(Map.of("error", "Mobile number not registered!"));
 				}
-				user.setPassword(newPassword.trim());
-				userRepository.save(user);
-			} 
-			else if (role.equalsIgnoreCase("shop")) {
-				Shop shop = shopRepository.findByMobile(mobile);
-				if (shop == null) {
-					return ResponseEntity.status(404).body(Map.of("error", "Shop not registered!"));
-				}
-				shop.setPassword(newPassword.trim());
-				shopRepository.save(shop);
-			} 
-			else if (role.equalsIgnoreCase("partner")) {
-				DeliveryPartner partner = partnerRepository.findByMobile(mobile).orElse(null);
-				if (partner == null) {
-					return ResponseEntity.status(404).body(Map.of("error", "Partner not registered!"));
-				}
-				partner.setPassword(newPassword.trim());
-				partnerRepository.save(partner);
+
+				// ఉచిత వాట్సాప్ లింక్ (Click to chat)
+				String whatsappUrl = "https://wa.me/91" + mobile + "?text=Your%20Foodiee%20Password%20Reset%20PIN%20is:%20" + pin;
+
+				return ResponseEntity.ok(Map.of(
+					"status", "SUCCESS",
+					"message", "4-digit PIN generated and saved successfully!",
+					"whatsappRedirectUrl", whatsappUrl,
+					"debugPin", pin 
+				));
+
+			} catch (Exception e) {
+				e.printStackTrace();
+				return ResponseEntity.status(500).body(Map.of("error", "Server error: " + e.getMessage()));
 			}
-
-			// సక్సెస్ అయిన తర్వాత స్టోరేజ్ నుండి పిన్ తొలగించడం
-			whatsappPinStorage.remove(mobile);
-
-			return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Password updated successfully via WhatsApp PIN!"));
-
-		} catch (Exception e) {
-			e.printStackTrace();
-			return ResponseEntity.status(500).body(Map.of("error", "Server error: " + e.getMessage()));
 		}
-	}
+		
+		// 4. డేటాబేస్ నుండి పిన్ వెరిఫై చేసి కొత్త పాస్‌వర్డ్ సెట్ చేయడానికి (Reset Password)
+		@PostMapping("/reset-password")
+		public ResponseEntity<?> resetPassword(@RequestBody AuthRequest request) {
+			try {
+				String mobile = request.getMobile();
+				String pin = request.getOtp(); // 4-digit PIN
+				String newPassword = request.getNewPassword();
+				String role = request.getRole() != null ? request.getRole().toLowerCase() : "customer";
+
+				if (mobile == null || mobile.isEmpty() || pin == null || pin.isEmpty() || newPassword == null || newPassword.isEmpty()) {
+					return ResponseEntity.badRequest().body(Map.of("error", "Mobile, PIN and new password are required"));
+				}
+
+				if (newPassword.trim().length() < 4) {
+					return ResponseEntity.badRequest().body(Map.of("error", "Password must be at least 4 characters long."));
+				}
+
+				boolean verified = false;
+
+				if (role.equalsIgnoreCase("customer")) {
+					User user = userRepository.findFirstByMobile(mobile);
+					if (user == null) {
+						return ResponseEntity.status(404).body(Map.of("error", "Mobile number not registered!"));
+					}
+					if (user.getOtp() != null && user.getOtp().equals(pin)) {
+						user.setPassword(newPassword.trim());
+						user.setOtp(null); // వాడిన పిన్‌ను క్లియర్ చేయడం
+						userRepository.save(user);
+						verified = true;
+					}
+				} 
+				else if (role.equalsIgnoreCase("shop")) {
+					Shop shop = shopRepository.findByMobile(mobile);
+					if (shop == null) {
+						return ResponseEntity.status(404).body(Map.of("error", "Shop not registered!"));
+					}
+					if (shop.getOtp() != null && shop.getOtp().equals(pin)) {
+						shop.setPassword(newPassword.trim());
+						shop.setOtp(null); // వాడిన పిన్‌ను క్లియర్ చేయడం
+						shopRepository.save(shop);
+						verified = true;
+					}
+				} 
+				else if (role.equalsIgnoreCase("partner")) {
+					DeliveryPartner partner = partnerRepository.findByMobile(mobile).orElse(null);
+					if (partner == null) {
+						return ResponseEntity.status(404).body(Map.of("error", "Partner not registered!"));
+					}
+					if (partner.getOtp() != null && partner.getOtp().equals(pin)) {
+						partner.setPassword(newPassword.trim());
+						partner.setOtp(null); // వాడిన పిన్‌ను క్లియర్ చేయడం
+						partnerRepository.save(partner);
+						verified = true;
+					}
+				}
+
+				if (!verified) {
+					return ResponseEntity.badRequest().body(Map.of("error", "Invalid or expired 4-digit PIN!"));
+				}
+
+				return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Password updated successfully in database via PIN!"));
+
+			} catch (Exception e) {
+				e.printStackTrace();
+				return ResponseEntity.status(500).body(Map.of("error", "Server error: " + e.getMessage()));
+			}
+		}
 
 	@PostMapping("/send-otp")
 	public ResponseEntity<?> sendOtp(@RequestBody AuthRequest request) {
