@@ -19,6 +19,7 @@ public class MenuItem {
     private boolean available = true;
     
     private Long shopId;
+   
 
     // Getters and Setters
     public Long getId() { return id; }

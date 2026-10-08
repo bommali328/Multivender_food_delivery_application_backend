@@ -265,6 +265,23 @@ public class AdminController {
 			System.err.println("WebSocket Admin Chat Error: " + e.getMessage());
 		}
 	}
+	
+	// ✅ డెలివరీ పార్టనర్ KYC వెరిఫై లేదా అప్డేట్ చేయడానికి ఎండ్‌పాయింట్
+		@PutMapping("/admin/partner/kyc/verify/{partnerId}")
+		public ResponseEntity<?> verifyPartnerKyc(@PathVariable Long partnerId, @RequestBody Map<String, String> payload) {
+			Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(partnerId);
+			if (partnerOpt.isPresent()) {
+				DeliveryPartner partner = partnerOpt.get();
+				String kycStatus = payload.get("kycStatus"); // VERIFIED or REJECTED
+				if (kycStatus != null) {
+					partner.setKycStatus(kycStatus);
+					deliveryPartnerRepository.save(partner);
+					return ResponseEntity.ok(Map.of("status", "success", "message", "Partner KYC updated to " + kycStatus, "kycStatus", partner.getKycStatus()));
+				}
+				return ResponseEntity.badRequest().body(Map.of("error", "KycStatus not specified in payload"));
+			}
+			return ResponseEntity.status(404).body(Map.of("error", "Delivery partner not found"));
+		}
 
 	// అన్ని షాప్‌ల కమిషన్ రేట్లు పొందడానికి
 	@GetMapping("/all")

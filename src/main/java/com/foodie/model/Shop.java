@@ -29,7 +29,17 @@ public class Shop {
     @Column(columnDefinition = "LONGTEXT")
     private String imageUrl; // మెయిన్ / ప్రైమరీ కవర్ ఇమేజ్
     
-    @ElementCollection(fetch = FetchType.EAGER)
+    private boolean shopOpen = true;
+    
+    
+    
+    public boolean isShopOpen() {
+		return shopOpen;
+	}
+	public void setShopOpen(boolean shopOpen) {
+		this.shopOpen = shopOpen;
+	}
+	@ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "shop_additional_images", joinColumns = @JoinColumn(name = "shop_id"))
     @Column(columnDefinition = "LONGTEXT")
     private List<String> additionalImages;
