@@ -92,26 +92,23 @@ public class OrderController {
 			// ✅ 2. WHATSAPP NOTIFICATION INTEGRATION (DUAL MESSAGES)
 			// ========================================================
 			try {
-				// 1. మొదటి మెసేజ్: ఆర్డర్ వివరాలు మరియు థాంక్యూ మెసేజ్
-				whatsAppNotificationService.sendOrderConfirmationToWhatsApp(
-					savedOrder.getCustomerMobile(), 
-					savedOrder.getId(), 
-					savedOrder.getShopName(), 
-					savedOrder.getItems(), 
-					savedOrder.getDeliveryAddress(), 
-					savedOrder.getTotalAmount(), 
-					savedOrder.getTransactionId()
-				);
+			    whatsAppNotificationService.sendOrderConfirmationToWhatsApp(
+			        savedOrder.getCustomerMobile(), 
+			        savedOrder.getId(), 
+			        savedOrder.getShopName(), 
+			        savedOrder.getItems(), 
+			        savedOrder.getDeliveryAddress(), 
+			        savedOrder.getTotalAmount(), 
+			        savedOrder.getTransactionId()
+			    );
 
-				// 2. రెండవ మెసేజ్: సెక్యూర్ డెలివరీ OTP
-				whatsAppNotificationService.sendOtpToWhatsApp(
-					savedOrder.getCustomerMobile(), 
-					savedOrder.getDeliveryOtp(), 
-					savedOrder.getId()
-				);
-
+			    whatsAppNotificationService.sendOtpToWhatsApp(
+			        savedOrder.getCustomerMobile(), 
+			        savedOrder.getDeliveryOtp(), 
+			        savedOrder.getId()
+			    );
 			} catch (Exception e) {
-				System.err.println("WhatsApp notification failed: " + e.getMessage());
+			    System.err.println("Instant WhatsApp notification failed: " + e.getMessage());
 			}
 
 			// నిర్దిష్టమైన షాప్ ఓనర్‌కి పాప్-అప్ నోటిఫికేషన్ పంపడం
@@ -219,17 +216,17 @@ public class OrderController {
 	// ✅ డెలివరీ యాప్ ఆటో-పోలింగ్ కోసం పెండింగ్ ఆర్డర్స్ బ్యాకప్ API
 	@GetMapping("/pending-delivery/{partnerId}")
 	public ResponseEntity<List<Order>> getPendingDeliveriesForPartner(@PathVariable Long partnerId) {
-		try {
-			List<Order> pendingOrders = orderRepository.findAll()
-				.stream()
-				.filter(o -> partnerId.equals(o.getDeliveryPartnerId()) && ("Pending Approval".equals(o.getStatus()) || "Accepted by Delivery Partner".equals(o.getStatus())))
-				.toList();
-			return ResponseEntity.ok(pendingOrders);
-		} catch (Exception e) {
-			return ResponseEntity.ok(List.of());
-		}
+	    try {
+	        List<Order> pendingOrders = orderRepository.findAll()
+	            .stream()
+	            .filter(o -> partnerId.equals(o.getDeliveryPartnerId()) 
+	                && ("Pending Approval".equals(o.getStatus()) || "Assigned".equals(o.getStatus()) || "Accepted by Delivery Partner".equals(o.getStatus())))
+	            .toList();
+	        return ResponseEntity.ok(pendingOrders);
+	    } catch (Exception e) {
+	        return ResponseEntity.ok(List.of());
+	    }
 	}
-
 	// డెలివరీ కంప్లీట్ చేయడానికి OTP వెరిఫై చేసే API (POST API)
 	@PostMapping("/verify-delivery/{id}")
 	public ResponseEntity<?> verifyAndCompleteDelivery(@PathVariable Long id, @RequestBody Map<String, String> payload) {
@@ -258,6 +255,18 @@ public class OrderController {
 		}
 	}
 	
+	@PostMapping("/decline/{id}")
+	public ResponseEntity<?> declineOrder(@PathVariable Long id, @RequestBody Map<String, Long> payload) {
+	    Order order = orderRepository.findById(id).orElse(null);
+	    if (order != null) {
+	        // Decline chesinappudu delivery partner assignment ni remove cheyali
+	        order.setDeliveryPartnerId(null);
+	        order.setStatus("Declined");
+	        orderRepository.save(order);
+	        return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Order declined successfully"));
+	    }
+	    return ResponseEntity.status(404).body("Order not found");
+	}
 	
 	
 	
