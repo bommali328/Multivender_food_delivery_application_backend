@@ -1,10 +1,11 @@
 package com.foodie.controller;
 
+import com.foodie.model.DeliveryPartner; // మీ మోడల్ ప్యాకేజీ ప్రకారం
 import com.foodie.model.Order;
 import com.foodie.model.User;
+import com.foodie.repository.DeliveryPartnerRepository; // ఇది ఇంపార్టెంట్
 import com.foodie.repository.OrderRepository;
 import com.foodie.repository.UserRepository;
-// import com.foodie.service.WhatsAppService; // మీ వాట్సాప్ సర్వీస్ ప్యాకేజీ ప్రకారం ఇది ఉంచుకోండి
 import com.foodie.service.WhatsAppNotificationService;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,9 +22,7 @@ import java.util.Optional;
 @CrossOrigin(origins = "*")
 public class OrderController {
 	
-	@Autowired
-	private WhatsAppNotificationService whatsAppNotificationService;
-
+	
 	@Autowired
 	private OrderRepository orderRepository;
 
@@ -31,98 +30,132 @@ public class OrderController {
 	private UserRepository userRepository;
 
 	@Autowired
+	private DeliveryPartnerRepository deliveryPartnerRepository; // ✅ డెలివరీ పార్టనర్ రిపాజిటరీ ఇంజెక్ట్ చేయబడింది
+
+	@Autowired
 	private SimpMessagingTemplate messagingTemplate;
 
-	// కొత్త ఆర్డర్ క్రియేట్ చేయడానికి / ప్లేస్ చేయడానికి మరియు రియల్ టైమ్ పాపప్ పంపడానికి (POST API)
-	@PostMapping({ "/create", "/place" })
-	public ResponseEntity<?> createOrder(@RequestBody Order order) {
-		if (order.getStatus() == null) {
-			order.setStatus("Pending Approval");
-		}
+	@Autowired
+	private WhatsAppNotificationService whatsAppNotificationService; // వాట్సాప్ సర్వీస్ ఆటో-వైరింగ్
 
-		// కస్టమర్ పేరు లేకపోతే యూజర్ రిపాజిటరీ నుండి ఫెచ్ చేసి సెట్ చేయడం
-		if (order.getCustomerName() == null || order.getCustomerName().trim().isEmpty()) {
-			User existingUser = userRepository.findFirstByMobile(order.getCustomerMobile());
-			if (existingUser != null && existingUser.getName() != null) {
-				order.setCustomerName(existingUser.getName());
-			} else {
-				order.setCustomerName("Guest Customer");
-			}
-		}
-
-		// ========================================================
-		// ✅ 1. FIRST ORDER FREE & PROMO CODE ONE-TIME USE VALIDATION
-		// ========================================================
-		String customerMobile = order.getCustomerMobile();
-		String promoCode = order.getPromoCode();
-
-		// ఈ మొబైల్ నంబర్‌పై ఇదివరకే ఏమైనా ఆర్డర్లు ఉన్నాయా అని కౌంట్ చేయడం
-		long previousOrdersCount = orderRepository.countByCustomerMobile(customerMobile);
-
-		// ఒకవేళ ఇది మొదటి ఆర్డర్ అయితే ఆటోమేటిక్‌గా డెలివరీ ఫీజు సున్నా (Free)
-		if (previousOrdersCount == 0) {
-			order.setDeliveryFee(0.0);
-		}
-
-		// ఒకవేళ కస్టమర్ ప్రొమో కోడ్ వాడు ఉంటే దానిని వెరిఫై చేయడం
-		if (promoCode != null && !promoCode.trim().isEmpty()) {
-			String cleanPromo = promoCode.trim().toUpperCase();
-
-			// వన్-టైమ్ యూజ్ చెక్: ఈ కస్టమర్ ఈ కోడ్‌ని ఇదివరకే వాడేశారా లేదా?
-			boolean alreadyUsed = orderRepository.existsByCustomerMobileAndPromoCode(customerMobile, cleanPromo);
-			if (alreadyUsed) {
-				return ResponseEntity.badRequest().body(Map.of("error", "ఈ కూపన్ కోడ్ మీరు ఇప్పటికే వాడేశారు! ఇది కేవలం ఒక్కసారే వర్తిస్తుంది."));
+	// కొత్త ఆర్డర్ క్రియేట్ చేయడానికి / ప్లేస్ చేయడానికి (POST API)
+		@PostMapping({ "/create", "/place" })
+		public ResponseEntity<Order> createOrder(@RequestBody Order order) {
+			if (order.getStatus() == null) {
+				order.setStatus("Pending Approval");
 			}
 
-			// మొదటి ఆర్డర్ కోడ్ అయితే, పాత ఆర్డర్లు ఉన్నాయో లేదో చెక్ చేయడం
-			if (cleanPromo.equals("FIRSTORDERFREE") || cleanPromo.equals("FIRST50") || cleanPromo.equals("FREEORDER")) {
-				if (previousOrdersCount > 0 && !cleanPromo.equals("FREEORDER")) {
-					return ResponseEntity.badRequest().body(Map.of("error", "ఈ కూపన్ కేవలం కొత్త యూజర్ల మొదటి ఆర్డర్‌కు మాత్రమే వర్తిస్తుంది."));
+			// కస్టమర్ పేరు లేకపోతే యూజర్ రిపాజిటరీ నుండి ఫెచ్ చేసి సెట్ చేయడం
+			if (order.getCustomerName() == null || order.getCustomerName().trim().isEmpty()) {
+				User existingUser = userRepository.findFirstByMobile(order.getCustomerMobile());
+				if (existingUser != null && existingUser.getName() != null) {
+					order.setCustomerName(existingUser.getName());
+				} else {
+					order.setCustomerName("Guest Customer");
 				}
 			}
+
+			// ========================================================
+			// ✅ 1. FIRST ORDER FREE & PROMO CODE VALIDATION
+			// ========================================================
+			String customerMobile = order.getCustomerMobile();
+			String promoCode = order.getPromoCode();
+
+			// 1. మొదటి ఆర్డర్ అయితే డెలివరీ ఫీజు ఫ్రీ చేయడం
+			long previousOrdersCount = orderRepository.countByCustomerMobile(customerMobile);
+			if (previousOrdersCount == 0) {
+			    order.setDeliveryFee(0.0);
+			}
+
+			// 2. ప్రోమో కోడ్ వాలిడేషన్ (ఒక యూజర్‌కి ఒక కోడ్ ఒక్కసారే వాడాలి)
+			if (promoCode != null && !promoCode.trim().isEmpty()) {
+			    String cleanPromo = promoCode.trim().toUpperCase();
+			    order.setPromoCode(cleanPromo);
+
+			    boolean alreadyUsed = orderRepository.existsByCustomerMobileAndPromoCode(customerMobile, cleanPromo);
+			    if (alreadyUsed) {
+			        // కూపన్ ఇప్పటికే వాడి ఉంటే ఎర్రర్ రెస్పాన్స్ పంపడం
+			        return ResponseEntity.status(400).body(null); 
+			    }
+			}
+
+			// 3. 4-అంకెల డెలివరీ OTP ఆటోమేటిక్‌గా క్రియేట్ అవ్వడం
+			if (order.getDeliveryOtp() == null || order.getDeliveryOtp().trim().isEmpty()) {
+			    String randomOtp = String.format("%04d", (int)(Math.random() * 10000));
+			    order.setDeliveryOtp(randomOtp);
+			}
+
+			// 4. అన్నీ సరిగ్గా ఉంటే ఒకేసారి ఆర్డర్‌ని డేటాబేస్‌లో సేవ్ చేయడం
+			Order savedOrder = orderRepository.save(order);
+
+			// ========================================================
+			// ✅ 2. WHATSAPP NOTIFICATION INTEGRATION (DUAL MESSAGES)
+			// ========================================================
+			try {
+				// 1. మొదటి మెసేజ్: ఆర్డర్ వివరాలు మరియు థాంక్యూ మెసేజ్
+				whatsAppNotificationService.sendOrderConfirmationToWhatsApp(
+					savedOrder.getCustomerMobile(), 
+					savedOrder.getId(), 
+					savedOrder.getShopName(), 
+					savedOrder.getItems(), 
+					savedOrder.getDeliveryAddress(), 
+					savedOrder.getTotalAmount(), 
+					savedOrder.getTransactionId()
+				);
+
+				// 2. రెండవ మెసేజ్: సెక్యూర్ డెలివరీ OTP
+				whatsAppNotificationService.sendOtpToWhatsApp(
+					savedOrder.getCustomerMobile(), 
+					savedOrder.getDeliveryOtp(), 
+					savedOrder.getId()
+				);
+
+			} catch (Exception e) {
+				System.err.println("WhatsApp notification failed: " + e.getMessage());
+			}
+
+			// నిర్దిష్టమైన షాప్ ఓనర్‌కి పాప్-అప్ నోటిఫికేషన్ పంపడం
+			if (savedOrder.getShopId() != null) {
+				messagingTemplate.convertAndSend("/topic/shop/" + savedOrder.getShopId(), savedOrder);
+				messagingTemplate.convertAndSend("/topic/shop/orders/" + savedOrder.getShopId(), savedOrder);
+			}
+
+			// ========================================================
+			// ✅ 3. SMART NEARBY DELIVERY ASSIGNMENT (Using Haversine Formula)
+			// ========================================================
+			try {
+				Double shopLat = savedOrder.getShopLat();
+				Double shopLng = savedOrder.getShopLng();
+
+				List<DeliveryPartner> availablePartners = null;
+
+				if (shopLat != null && shopLng != null) {
+					double radiusInKm = 10.0;
+					availablePartners = deliveryPartnerRepository.findAvailablePartnersNearby(shopLat, shopLng, radiusInKm);
+				}
+
+				if (availablePartners == null || availablePartners.isEmpty()) {
+					availablePartners = deliveryPartnerRepository.findByIsOnlineTrueAndIsBusyFalse();
+				}
+
+				if (availablePartners != null && !availablePartners.isEmpty()) {
+					DeliveryPartner assignedPartner = availablePartners.get(0);
+
+					savedOrder.setDeliveryPartnerId(assignedPartner.getId());
+					orderRepository.save(savedOrder);
+
+					messagingTemplate.convertAndSend("/topic/delivery/orders/" + assignedPartner.getId(), savedOrder);
+					
+					System.out.println("Order assigned exclusively to nearby partner ID: " + assignedPartner.getId());
+				} else {
+					System.out.println("No delivery partners available nearby right now.");
+				}
+			} catch (Exception e) {
+				System.err.println("Smart partner assignment failed: " + e.getMessage());
+			}
+
+			return ResponseEntity.ok(savedOrder);
 		}
-
-		// ఆర్డర్ జనరేట్ అయ్యేటప్పుడు 4-అంకెల డెలివరీ OTP ఆటోమేటిక్‌గా క్రియేట్ అవ్వడం
-		if (order.getDeliveryOtp() == null || order.getDeliveryOtp().trim().isEmpty()) {
-			String randomOtp = String.format("%04d", (int)(Math.random() * 10000));
-			order.setDeliveryOtp(randomOtp);
-		}
-
-		Order savedOrder = orderRepository.save(order);
-
-		// ========================================================
-		// ✅ 2. WHATSAPP NOTIFICATION INTEGRATION (Order Details & OTP)
-		// ========================================================
-		try {
-			String whatsAppMessage = "🎉 Order Placed Successfully!\n" +
-									 "🆔 Order ID: #" + savedOrder.getId() + "\n" +
-									 "📦 Status: " + savedOrder.getStatus() + "\n" +
-									 "💵 Delivery Fee: ₹" + savedOrder.getDeliveryFee() + "\n" +
-									 "🔑 Delivery OTP: " + savedOrder.getDeliveryOtp() + "\n" +
-									 "Thank you for ordering with Foodiee!";
-			
-			// whatsAppService.sendWhatsAppMessage(order.getCustomerMobile(), whatsAppMessage);
-		} catch (Exception e) {
-			System.err.println("WhatsApp notification failed: " + e.getMessage());
-		}
-
-		// 1. నిర్దిష్టమైన షాప్ ఓనర్‌కి పాపప్ నోటిఫికేషన్ పంపడం
-		if (savedOrder.getShopId() != null) {
-			messagingTemplate.convertAndSend("/topic/shop/" + savedOrder.getShopId(), savedOrder);
-			messagingTemplate.convertAndSend("/topic/shop/orders/" + savedOrder.getShopId(), savedOrder);
-		}
-
-		// 2. 🛵 ఆన్‌లైన్‌లో ఉన్న డెలివరీ పార్టనర్లందరికీ రియల్ టైమ్ పాపప్ బ్రాడ్‌కాస్ట్ చేయడం
-		messagingTemplate.convertAndSend("/topic/delivery-partners", savedOrder);
-		messagingTemplate.convertAndSend("/topic/broadcast/delivery", savedOrder);
-		
-		if (savedOrder.getDeliveryPartnerId() != null) {
-			messagingTemplate.convertAndSend("/topic/delivery/orders/" + savedOrder.getDeliveryPartnerId(), savedOrder);
-		}
-
-		return ResponseEntity.ok(savedOrder);
-	}
-
 	// కస్టమర్ మొబైల్ నంబర్ ఆధారంగా ఆర్డర్ హిస్టరీ చూడటానికి (GET API)
 	@GetMapping("/customer/{mobile}")
 	public ResponseEntity<List<Order>> getOrdersByCustomer(@PathVariable String mobile) {
@@ -183,6 +216,20 @@ public class OrderController {
 		}
 	}
 
+	// ✅ డెలివరీ యాప్ ఆటో-పోలింగ్ కోసం పెండింగ్ ఆర్డర్స్ బ్యాకప్ API
+	@GetMapping("/pending-delivery/{partnerId}")
+	public ResponseEntity<List<Order>> getPendingDeliveriesForPartner(@PathVariable Long partnerId) {
+		try {
+			List<Order> pendingOrders = orderRepository.findAll()
+				.stream()
+				.filter(o -> partnerId.equals(o.getDeliveryPartnerId()) && ("Pending Approval".equals(o.getStatus()) || "Accepted by Delivery Partner".equals(o.getStatus())))
+				.toList();
+			return ResponseEntity.ok(pendingOrders);
+		} catch (Exception e) {
+			return ResponseEntity.ok(List.of());
+		}
+	}
+
 	// డెలివరీ కంప్లీట్ చేయడానికి OTP వెరిఫై చేసే API (POST API)
 	@PostMapping("/verify-delivery/{id}")
 	public ResponseEntity<?> verifyAndCompleteDelivery(@PathVariable Long id, @RequestBody Map<String, String> payload) {
@@ -213,6 +260,7 @@ public class OrderController {
 	
 	
 	
+	
 	// ఆర్డర్ స్టేటస్ అప్‌డేట్ చేయడానికి (PUT API)
 	@PutMapping("/status/{orderId}")
 	public ResponseEntity<?> updateOrderStatus(@PathVariable Long orderId, @RequestParam String status) {
@@ -222,11 +270,13 @@ public class OrderController {
 			order.setStatus(status); 
 			orderRepository.save(order);
 
-			messagingTemplate.convertAndSend("/topic/delivery-partners", order);
 			messagingTemplate.convertAndSend("/topic/order/status/" + orderId, status);
 
 			return ResponseEntity.ok(Map.of("status", "success", "message", "Order status updated to " + status));
 		}
 		return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
 	}
+	
+	
+	
 }

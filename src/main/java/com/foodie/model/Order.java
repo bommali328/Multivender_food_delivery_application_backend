@@ -37,6 +37,8 @@ public class Order {
     private String paymentMethod;
     private String deliveryOtp;
     
+    private String transactionId;
+    
     @Column(name = "promo_code")
     private String promoCode;
 
@@ -52,6 +54,8 @@ public class Order {
     private Long deliveryPartnerId;
 
     // --- Getters and Setters ---
+    
+    private String getTransactionId;
     
     public LocalDateTime getOrderTime() {
         return orderTime;
@@ -117,4 +121,21 @@ public class Order {
     
     public Long getCustomerId() { return customerId; }
     public void setCustomerId(Long customerId) { this.customerId = customerId; }
+
+	public String getGetTransactionId() {
+		return getTransactionId;
+	}
+
+	public void setGetTransactionId(String getTransactionId) {
+		this.getTransactionId = getTransactionId;
+	}
+
+	public String getTransactionId() {
+	    if (this.transactionId != null && !this.transactionId.trim().isEmpty()) {
+	        return this.transactionId;
+	    }
+	    return "ORD_TXN_" + (this.id != null ? this.id : System.currentTimeMillis() % 1000000);
+	}
+
+	
 }

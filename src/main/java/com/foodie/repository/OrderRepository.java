@@ -34,4 +34,6 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     // 2. ఒక కస్టమర్ నిర్దిష్టమైన ప్రొమో కోడ్‌ని ఇదివరకే వాడేశారా లేదా అని చెక్ చేయడానికి (One-time use validation)
     boolean existsByCustomerMobileAndPromoCode(String customerMobile, String promoCode);
     
+    
+    
 }
