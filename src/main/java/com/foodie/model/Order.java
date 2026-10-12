@@ -39,7 +39,17 @@ public class Order {
     
     private String transactionId;
     
-    @Column(name = "promo_code")
+    private String imageUrl;
+    
+    public void setTransactionId(String transactionId) {
+		this.transactionId = transactionId;
+	}
+
+	public void setImageUrl(String imageUrl) {
+		this.imageUrl = imageUrl;
+	}
+
+	@Column(name = "promo_code")
     private String promoCode;
 
     public String getPromoCode() {
@@ -136,6 +146,13 @@ public class Order {
 	    }
 	    return "ORD_TXN_" + (this.id != null ? this.id : System.currentTimeMillis() % 1000000);
 	}
+
+	public String getImageUrl() {
+		return imageUrl;
+	}
+
+
+	
 
 	
 }

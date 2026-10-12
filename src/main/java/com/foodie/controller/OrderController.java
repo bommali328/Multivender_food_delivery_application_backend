@@ -1,11 +1,14 @@
 package com.foodie.controller;
 
+import com.foodie.model.Customer;
 import com.foodie.model.DeliveryPartner; // మీ మోడల్ ప్యాకేజీ ప్రకారం
 import com.foodie.model.Order;
 import com.foodie.model.User;
+import com.foodie.repository.CustomerRepository;
 import com.foodie.repository.DeliveryPartnerRepository; // ఇది ఇంపార్టెంట్
 import com.foodie.repository.OrderRepository;
 import com.foodie.repository.UserRepository;
+import com.foodie.service.NotificationService;
 import com.foodie.service.WhatsAppNotificationService;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+
 
 @RestController
 @RequestMapping("/api/orders")
@@ -36,7 +39,16 @@ public class OrderController {
 	private SimpMessagingTemplate messagingTemplate;
 
 	@Autowired
-	private WhatsAppNotificationService whatsAppNotificationService; // వాట్సాప్ సర్వీస్ ఆటో-వైరింగ్
+	private WhatsAppNotificationService whatsAppNotificationService; 
+	// వాట్సాప్ సర్వీస్ ఆటో-వైరింగ్
+	
+	@Autowired
+	private CustomerRepository customerRepository;
+
+	@Autowired
+	private NotificationService notificationService;
+	
+
 
 	// కొత్త ఆర్డర్ క్రియేట్ చేయడానికి / ప్లేస్ చేయడానికి (POST API)
 		@PostMapping({ "/create", "/place" })
@@ -118,6 +130,28 @@ public class OrderController {
 			}
 
 			// ========================================================
+						// 🌟 2.1. FIREBASE PUSH NOTIFICATION FOR ORDER CREATION (NEW)
+						// ========================================================
+						try {
+						    if (savedOrder.getCustomerMobile() != null) {
+						        Customer customer = customerRepository.findByMobile(savedOrder.getCustomerMobile());
+						        if (customer != null && customer.getFcmToken() != null && !customer.getFcmToken().isEmpty()) {
+						            String title = "Order Placed Successfully! 🎉";
+						            String body = "Your order #" + savedOrder.getId() + " has been placed and is pending approval.";
+						            
+						            // NotificationService ద్వారా కస్టమర్‌కి పుష్ నోటిఫికేషన్ పంపడం
+						            notificationService.sendPushNotificationToCustomer(
+						                customer.getFcmToken(), 
+						                title, 
+						                body, 
+						                savedOrder.getImageUrl()
+						            );
+						        }
+						    }
+						} catch (Exception e) {
+						    System.err.println("Firebase order placement push notification failed: " + e.getMessage());
+						}
+			// ========================================================
 			// ✅ 3. SMART NEARBY DELIVERY ASSIGNMENT (Using Haversine Formula)
 			// ========================================================
 			try {
@@ -183,24 +217,25 @@ public class OrderController {
 
 	@PostMapping("/accept/{id}")
 	public ResponseEntity<Order> acceptOrder(@PathVariable Long id,
-			@RequestBody(required = false) Order deliveryPayload) {
-		Order order = orderRepository.findById(id).orElse(null);
-		if (order != null) {
-			order.setStatus("Accepted by Delivery Partner");
-			
-			if (deliveryPayload != null) {
-				if (deliveryPayload.getDeliveryFee() > 0) {
-					order.setDeliveryFee(deliveryPayload.getDeliveryFee());
-				}
-				if (deliveryPayload.getDeliveryPartnerId() != null) {
-					order.setDeliveryPartnerId(deliveryPayload.getDeliveryPartnerId());
-				}
-			}
-			
-			Order updatedOrder = orderRepository.save(order);
-			return ResponseEntity.ok(updatedOrder);
-		}
-		return ResponseEntity.notFound().build();
+	        @RequestBody(required = false) Order deliveryPayload) {
+	    Order order = orderRepository.findById(id).orElse(null);
+	    if (order != null) {
+	        // 🔴 స్టేటస్‌ను స్పష్టంగా ACCEPTED అని మార్చాలి
+	        order.setStatus("ACCEPTED");
+	        
+	        if (deliveryPayload != null) {
+	            if (deliveryPayload.getDeliveryFee() > 0) {
+	                order.setDeliveryFee(deliveryPayload.getDeliveryFee());
+	            }
+	            if (deliveryPayload.getDeliveryPartnerId() != null) {
+	                order.setDeliveryPartnerId(deliveryPayload.getDeliveryPartnerId());
+	            }
+	        }
+	        
+	        Order updatedOrder = orderRepository.save(order);
+	        return ResponseEntity.ok(updatedOrder);
+	    }
+	    return ResponseEntity.notFound().build();
 	}
 	
 	@GetMapping("/customer-history/{mobile}")
@@ -269,23 +304,33 @@ public class OrderController {
 	}
 	
 	
-	
-	// ఆర్డర్ స్టేటస్ అప్‌డేట్ చేయడానికి (PUT API)
-	@PutMapping("/status/{orderId}")
-	public ResponseEntity<?> updateOrderStatus(@PathVariable Long orderId, @RequestParam String status) {
-		Optional<Order> orderOpt = orderRepository.findById(orderId);
-		if (orderOpt.isPresent()) {
-			Order order = orderOpt.get();
-			order.setStatus(status); 
+	// ఆర్డర్ స్టేటస్ అప్‌డేట్ చేయడానికి మరియు కస్టమర్‌కి పుష్ నోటిఫికేషన్ పంపడానికి (PUT API)
+		@PutMapping({"/status/{orderId}", "/update-status/{orderId}"})
+		public ResponseEntity<?> updateOrderStatus(@PathVariable Long orderId, @RequestParam String status) {
+			Order order = orderRepository.findById(orderId).orElse(null);
+			if (order == null) {
+				return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
+			}
+
+			order.setStatus(status); // ఉదాహరణకు: "Out for Delivery"
 			orderRepository.save(order);
 
+			// వెబ్‌సాకెట్ ద్వారా రియల్-టైమ్ అప్‌డేట్ పంపడం
 			messagingTemplate.convertAndSend("/topic/order/status/" + orderId, status);
 
-			return ResponseEntity.ok(Map.of("status", "success", "message", "Order status updated to " + status));
+			// 🌟 కస్టమర్‌కి ఆటోమేటిక్‌గా పుష్ నోటిఫికేషన్ పంపడం
+			String customerMobile = order.getCustomerMobile();
+	        if (customerMobile != null && !customerMobile.isEmpty()) {
+	            Customer customer = customerRepository.findFirstByMobile(customerMobile);
+	            if (customer != null && customer.getFcmToken() != null && !customer.getFcmToken().isEmpty()) {
+	                String title = "Arriving Shortly";
+	                String body = "Your order #" + orderId + " is " + status.toLowerCase() + "!";
+	                
+	                // NotificationService లోని మెథడ్‌ని కాల్ చేయడం
+	                notificationService.sendPushNotificationToCustomer(customer.getFcmToken(), title, body, order.getImageUrl());
+	            }
+	        }
+
+			return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Order status updated & notification sent"));
 		}
-		return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
-	}
-	
-	
-	
 }
