@@ -49,6 +49,9 @@ public class AdminController {
 	@Autowired
 	private SimpMessagingTemplate messagingTemplate;
 
+	@Autowired(required = false)
+	private com.google.firebase.messaging.FirebaseMessaging firebaseMessaging;
+	
 	// షాప్ వారీగా వేర్వేరు కమిషన్ రేట్లు స్టోర్ చేయడానికి
 	private static final Map<Long, Double> shopCommissionMap = new HashMap<>();
 
@@ -139,16 +142,14 @@ public class AdminController {
 		return ResponseEntity.ok(partners);
 	}
 
-	// 🚀 షాప్స్ అన్నీ అడ్మిన్ కోసం ఫెచ్ చేయడానికి (URL క్లాష్ రాకుండా
-	// /admin/shop/all)
+	// 🚀 షాప్స్ అన్నీ అడ్మిన్ కోసం ఫెచ్ చేయడానికి
 	@GetMapping("/admin/shop/all")
 	public ResponseEntity<List<Shop>> getAllShopsForAdmin() {
 		List<Shop> shops = shopRepository.findAll();
 		return ResponseEntity.ok(shops);
 	}
 
-	// 🚀 అడ్మిన్ చాట్ కోసం అన్ని కేటగిరీల యూజర్లను (Role బట్టి) ఫెచ్ చేసే
-	// ఎండ్‌పాయింట్
+	// 🚀 అడ్మిన్ చాట్ కోసం అన్ని కేటగిరీల యూజర్లను ఫెచ్ చేసే ఎండ్‌పాయింట్
 	@GetMapping("/admin/chat/users")
 	public ResponseEntity<?> getUsersForAdminChat(@RequestParam("role") String role) {
 		try {
@@ -172,13 +173,14 @@ public class AdminController {
 		try {
 			String imageUrl = null;
 			if (image != null && !image.isEmpty()) {
-				imageUrl = "uploaded_images/" + image.getOriginalFilename();
+				imageUrl = "https://api.foodiee.shop/uploaded_images/" + image.getOriginalFilename();
 			}
 
 			Map<String, Object> payload = new HashMap<>();
 			payload.put("message", message);
 			payload.put("imageUrl", imageUrl);
 
+			// 1. రియల్ టైమ్ వెబ్‌సాకెట్ అలర్ట్స్ కోసం
 			if ("All Users".equalsIgnoreCase(target)) {
 				messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
 				messagingTemplate.convertAndSend("/topic/broadcast/shops", payload);
@@ -189,6 +191,26 @@ public class AdminController {
 				messagingTemplate.convertAndSend("/topic/broadcast/shops", payload);
 			} else if ("All Customers".equalsIgnoreCase(target)) {
 				messagingTemplate.convertAndSend("/topic/broadcast/customers", payload);
+				
+				// 🌟 2. డేటాబేస్ నుండి కస్టమర్ల FCM Tokens సేకరించి మొబైల్‌కి Push Notification పంపడం
+				List<User> customers = userRepository.findAll();
+				for (User customer : customers) {
+					if (customer.getFcmToken() != null && !customer.getFcmToken().isEmpty() && firebaseMessaging != null) {
+						com.google.firebase.messaging.Message.Builder msgBuilder = com.google.firebase.messaging.Message.builder()
+								.setToken(customer.getFcmToken())
+								.setNotification(com.google.firebase.messaging.Notification.builder()
+										.setTitle("📢 Foodiee Announcement")
+										.setBody(message)
+										.setImage(imageUrl)
+										.build());
+						
+						try {
+							firebaseMessaging.send(msgBuilder.build());
+						} catch (Exception e) {
+							System.err.println("FCM Push Error for " + customer.getMobile() + ": " + e.getMessage());
+						}
+					}
+				}
 			} else {
 				messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
 			}
@@ -245,7 +267,6 @@ public class AdminController {
 	@org.springframework.messaging.handler.annotation.MessageMapping("/admin-partner/send")
 	public void receiveAdminPartnerMessage(AdminChatMessage chatMessage) {
 		try {
-			// మొబైల్ నంబర్ క్లీన్ చేయడం
 			String mob = chatMessage.getPartnerMobile() != null ? chatMessage.getPartnerMobile()
 					: chatMessage.getIdentifier();
 			if (mob != null) {
@@ -254,10 +275,8 @@ public class AdminController {
 				chatMessage.setIdentifier(cleanMob);
 			}
 
-			// డేటాబేస్‌లో మెసేజ్ సేవ్ చేయడం
 			AdminChatMessage savedMsg = adminChatMessageRepository.save(chatMessage);
 
-			// సంబంధిత పార్ట్‌నర్/షాప్ మరియు అడ్మిన్ చాట్ టాపిక్‌కి బ్రాడ్‌కాస్ట్ చేయడం
 			messagingTemplate.convertAndSend("/topic/chat/admin-partner/" + savedMsg.getIdentifier(), savedMsg);
 			messagingTemplate.convertAndSend("/topic/admin/chats", savedMsg);
 
@@ -265,27 +284,68 @@ public class AdminController {
 			System.err.println("WebSocket Admin Chat Error: " + e.getMessage());
 		}
 	}
-	
+
 	// ✅ డెలివరీ పార్టనర్ KYC వెరిఫై లేదా అప్డేట్ చేయడానికి ఎండ్‌పాయింట్
-		@PutMapping("/admin/partner/kyc/verify/{partnerId}")
-		public ResponseEntity<?> verifyPartnerKyc(@PathVariable Long partnerId, @RequestBody Map<String, String> payload) {
-			Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(partnerId);
-			if (partnerOpt.isPresent()) {
-				DeliveryPartner partner = partnerOpt.get();
-				String kycStatus = payload.get("kycStatus"); // VERIFIED or REJECTED
-				if (kycStatus != null) {
-					partner.setKycStatus(kycStatus);
-					deliveryPartnerRepository.save(partner);
-					return ResponseEntity.ok(Map.of("status", "success", "message", "Partner KYC updated to " + kycStatus, "kycStatus", partner.getKycStatus()));
-				}
-				return ResponseEntity.badRequest().body(Map.of("error", "KycStatus not specified in payload"));
+	@PutMapping("/admin/partner/kyc/verify/{partnerId}")
+	public ResponseEntity<?> verifyPartnerKyc(@PathVariable Long partnerId, @RequestBody Map<String, String> payload) {
+		Optional<DeliveryPartner> partnerOpt = deliveryPartnerRepository.findById(partnerId);
+		if (partnerOpt.isPresent()) {
+			DeliveryPartner partner = partnerOpt.get();
+			String kycStatus = payload.get("kycStatus");
+			if (kycStatus != null) {
+				partner.setKycStatus(kycStatus);
+				deliveryPartnerRepository.save(partner);
+				return ResponseEntity.ok(Map.of("status", "success", "message", "Partner KYC updated to " + kycStatus,
+						"kycStatus", partner.getKycStatus()));
 			}
-			return ResponseEntity.status(404).body(Map.of("error", "Delivery partner not found"));
+			return ResponseEntity.badRequest().body(Map.of("error", "KycStatus not specified in payload"));
 		}
+		return ResponseEntity.status(404).body(Map.of("error", "Delivery partner not found"));
+	}
+	
+	@PutMapping("/order/status/{orderId}")
+	public ResponseEntity<?> updateOrderStatus(@PathVariable Long orderId, @RequestBody Map<String, String> payload) {
+		Order order = orderRepository.findById(orderId).orElse(null);
+		if (order != null) {
+			String newStatus = payload.get("status");
+			order.setStatus(newStatus);
+			orderRepository.save(order);
+
+			String customerMobile = order.getCustomerMobile();
+			Optional<User> userOpt = userRepository.findById(customerMobile);
+			
+			if (userOpt.isPresent() && userOpt.get().getFcmToken() != null && firebaseMessaging != null) {
+				String fcmToken = userOpt.get().getFcmToken();
+				
+				String title = "📦 Order Update: " + newStatus;
+				String body = "Your order #" + orderId + " is now " + newStatus.toLowerCase() + ".";
+
+				try {
+					com.google.firebase.messaging.Message message = com.google.firebase.messaging.Message.builder()
+							.setToken(fcmToken)
+							.setNotification(com.google.firebase.messaging.Notification.builder()
+									.setTitle(title)
+									.setBody(body)
+									.build())
+							.putData("orderId", String.valueOf(orderId))
+							.putData("status", newStatus)
+							.build();
+
+					firebaseMessaging.send(message);
+				} catch (Exception e) {
+					System.err.println("Order Push Notification Error: " + e.getMessage());
+				}
+			}
+
+			return ResponseEntity.ok(Map.of("status", "success", "message", "Order status updated and notification sent"));
+		}
+		return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
+	}
 
 	// అన్ని షాప్‌ల కమిషన్ రేట్లు పొందడానికి
 	@GetMapping("/all")
 	public ResponseEntity<?> getAllCommissions() {
 		return ResponseEntity.ok(shopCommissionMap);
 	}
+
 }

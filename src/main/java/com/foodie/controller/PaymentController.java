@@ -1,7 +1,9 @@
 package com.foodie.controller;
 
 import com.foodie.model.Payment;
+import com.foodie.model.User;
 import com.foodie.repository.PaymentRepository;
+import com.foodie.repository.UserRepository;
 import com.foodie.service.PaymentService;
 import com.razorpay.Order;
 import com.razorpay.RazorpayClient;
@@ -24,13 +26,35 @@ public class PaymentController {
 
     @Autowired
     private PaymentRepository paymentRepository;
+    
+    @Autowired
+    private UserRepository userRepository;
 
     private static final String RAZORPAY_KEY_ID = "rzp_test_TTbofIebO8RB99"; // మీ లైవ్/టెస్ట్ కీ
     private static final String RAZORPAY_KEY_SECRET = "YOUR_RAZORPAY_SECRET";
 
     @PostMapping("/process")
-    public ResponseEntity<Payment> processPayment(@RequestBody Payment payment) {
+    public ResponseEntity<?> processPayment(@RequestBody Payment payment) {
+        // 1. Payment record save cheyadam
         Payment savedPayment = paymentService.savePayment(payment);
+
+        // 2. 🌟 Yuser wallet balance ni database lo update cheyadam
+        try {
+            String mobile = payment.getCustomerMobile(); // Payment model lo customer mobile undali
+            double amount = payment.getTotalAmount();    // Paid amount
+
+            if (mobile != null && !mobile.isEmpty()) {
+                User user = userRepository.findFirstByMobile(mobile);
+                if (user != null) {
+                    double currentWallet = user.getWalletBalance();
+                    user.setWalletBalance(currentWallet + amount); // Wallet lo amount add avuthundi
+                    userRepository.save(user);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Wallet balance update failed: " + e.getMessage());
+        }
+
         return ResponseEntity.ok(savedPayment);
     }
 

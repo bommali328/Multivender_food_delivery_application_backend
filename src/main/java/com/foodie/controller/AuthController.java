@@ -34,83 +34,92 @@ public class AuthController {
 	// 1. రిజిస్ట్రేషన్ ఏపీఐ (Register Partner / User / Shop)[cite: 5]
 	@PostMapping("/register")
 	public ResponseEntity<?> registerUser(@RequestBody AuthRequest request) {
-		try {
-			String mobile = request.getMobile();
-			String role = request.getRole() != null ? request.getRole().toLowerCase() : "customer";
+	    try {
+	        String mobile = request.getMobile();
+	        String role = request.getRole() != null ? request.getRole().toLowerCase() : "customer";
 
-			if (mobile == null || mobile.trim().isEmpty()) {
-				return ResponseEntity.badRequest().body(Map.of("error", "Mobile number is required"));
-			}
+	        if (mobile == null || mobile.trim().isEmpty()) {
+	            return ResponseEntity.badRequest().body(Map.of("error", "Mobile number is required"));
+	        }
 
-			if (role.equalsIgnoreCase("partner")) {
-				DeliveryPartner existing = partnerRepository.findByMobile(mobile).orElse(null);
-				if (existing != null) {
-					return ResponseEntity.badRequest().body(Map.of("error", "Mobile number already registered!"));
-				}
+	        if (role.equalsIgnoreCase("partner")) {
+	            DeliveryPartner existing = partnerRepository.findByMobile(mobile).orElse(null);
+	            if (existing != null) {
+	                return ResponseEntity.badRequest().body(Map.of("error", "Mobile number already registered!"));
+	            }
 
-				DeliveryPartner newPartner = new DeliveryPartner();
-				newPartner.setFullName(request.getFullName() != null ? request.getFullName() : "Ichapuram Rider");
-				newPartner.setMobile(mobile);
-				newPartner.setPassword(request.getPassword());
-				newPartner.setVehicleType(request.getVehicleType() != null ? request.getVehicleType() : "Motorcycle");
-				newPartner.setBikeNumber(request.getBikeNumber() != null ? request.getBikeNumber() : "AP30BIKE0000");
-				newPartner.setKycStatus("Pending");
-				newPartner.setLatitude(18.5793);
-				newPartner.setLongitude(84.4452);
-				newPartner.setOnline(false);
-				newPartner.setRainSurgeActive(false);
-				newPartner.setWalletBalance(0.0);
-				newPartner.setCashInHand(0.0);
+	            DeliveryPartner newPartner = new DeliveryPartner();
+	            newPartner.setFullName(request.getFullName() != null && !request.getFullName().trim().isEmpty() 
+	                                   ? request.getFullName().trim() 
+	                                   : "Ichapuram Rider");
+	            newPartner.setMobile(mobile);
+	            newPartner.setPassword(request.getPassword());
+	            newPartner.setVehicleType(request.getVehicleType() != null ? request.getVehicleType() : "Motorcycle");
+	            newPartner.setBikeNumber(request.getBikeNumber() != null ? request.getBikeNumber() : "AP30BIKE0000");
+	            newPartner.setKycStatus("Pending");
+	            newPartner.setLatitude(18.5793);
+	            newPartner.setLongitude(84.4452);
+	            newPartner.setOnline(false);
+	            newPartner.setRainSurgeActive(false);
+	            newPartner.setWalletBalance(0.0);
+	            newPartner.setCashInHand(0.0);
 
-				DeliveryPartner saved = partnerRepository.save(newPartner);
-				return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Partner registered successfully", "data", saved));
-			} 
-			else if (role.equalsIgnoreCase("customer")) {
-				User existing = userRepository.findFirstByMobile(mobile);
-				if (existing != null) {
-					return ResponseEntity.badRequest().body(Map.of("error", "Mobile number already registered!"));
-				}
+	            DeliveryPartner saved = partnerRepository.save(newPartner);
+	            return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Partner registered successfully", "data", saved));
+	        } 
+	        else if (role.equalsIgnoreCase("customer")) {
+	            User existing = userRepository.findFirstByMobile(mobile);
+	            if (existing != null) {
+	                return ResponseEntity.badRequest().body(Map.of("error", "Mobile number already registered!"));
+	            }
 
-				User newUser = new User();
-				newUser.setName(request.getFullName() != null ? request.getFullName() : "Foodie Customer");
-				newUser.setMobile(mobile);
-				newUser.setPassword(request.getPassword());
-				newUser.setRole("Customer");
-				newUser.setActive(true);
+	            // 🌟 యూజర్ ఎంటర్ చేసిన పేరుని కచ్ఛితంగా తీసుకోవడం (Default పేరు తీసేయబడింది)
+	            String customerName = request.getFullName() != null ? request.getFullName() : request.getName();
+	            if (customerName == null || customerName.trim().isEmpty()) {
+	                return ResponseEntity.badRequest().body(Map.of("error", "Customer name is mandatory"));
+	            }
 
-				User saved = userRepository.save(newUser);
-				return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Customer registered successfully", "data", saved));
-			}
-			else if (role.equalsIgnoreCase("shop")) {
-				Shop existing = shopRepository.findByMobile(mobile);
-				if (existing != null) {
-					return ResponseEntity.badRequest().body(Map.of("error", "Mobile number already registered!"));
-				}
+	            User newUser = new User();
+	            newUser.setName(customerName.trim());
+	            newUser.setMobile(mobile);
+	            newUser.setPassword(request.getPassword());
+	            newUser.setRole("Customer");
+	            newUser.setActive(true);
 
-				Shop newShop = new Shop();
-				newShop.setShopName(request.getFullName() != null ? request.getFullName() : "Ichapuram Shop");
-				newShop.setMobile(mobile);
-				newShop.setPassword(request.getPassword());
-				
-				String selectedCategory = request.getCategory() != null ? request.getCategory() : 
-				                          (request.getBikeNumber() != null ? request.getBikeNumber() : "FOOD");
-				newShop.setCategory(selectedCategory);
-				
-				if(request.getVehicleType() != null && !request.getVehicleType().isEmpty()) {
-					newShop.setAddress(request.getVehicleType());
-				}
+	            User saved = userRepository.save(newUser);
+	            return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Customer registered successfully", "data", saved));
+	        }
+	        else if (role.equalsIgnoreCase("shop")) {
+	            Shop existing = shopRepository.findByMobile(mobile);
+	            if (existing != null) {
+	                return ResponseEntity.badRequest().body(Map.of("error", "Mobile number already registered!"));
+	            }
 
-				Shop saved = shopRepository.save(newShop);
-				return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Shop registered successfully", "data", saved));
-			}
+	            Shop newShop = new Shop();
+	            newShop.setShopName(request.getFullName() != null && !request.getFullName().trim().isEmpty() 
+	                                ? request.getFullName().trim() 
+	                                : "Ichapuram Shop");
+	            newShop.setMobile(mobile);
+	            newShop.setPassword(request.getPassword());
+	            
+	            String selectedCategory = request.getCategory() != null ? request.getCategory() : 
+	                                      (request.getBikeNumber() != null ? request.getBikeNumber() : "FOOD");
+	            newShop.setCategory(selectedCategory);
+	            
+	            if(request.getVehicleType() != null && !request.getVehicleType().isEmpty()) {
+	                newShop.setAddress(request.getVehicleType());
+	            }
 
-			return ResponseEntity.badRequest().body(Map.of("error", "Invalid Role for Registration"));
-		} catch (Exception e) {
-			e.printStackTrace();
-			return ResponseEntity.status(500).body(Map.of("error", "Server error: " + e.getMessage()));
-		}
+	            Shop saved = shopRepository.save(newShop);
+	            return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Shop registered successfully", "data", saved));
+	        }
+
+	        return ResponseEntity.badRequest().body(Map.of("error", "Invalid Role for Registration"));
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.status(500).body(Map.of("error", "Server error: " + e.getMessage()));
+	    }
 	}
-
 	// 2. పాస్‌వర్డ్ లాగిన్ ఏపీఐ[cite: 5]
 	@PostMapping("/login")
 	public ResponseEntity<?> loginWithPassword(@RequestBody AuthRequest request) {
@@ -416,6 +425,10 @@ class AuthRequest {
 	private String category; 
 
 	public String getMobile() { return mobile; }
+	public String getName() {
+		// TODO Auto-generated method stub
+		return null;
+	}
 	public void setMobile(String mobile) { this.mobile = mobile; }
 
 	public String getOtp() { return otp; }

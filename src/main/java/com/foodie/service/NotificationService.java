@@ -81,10 +81,12 @@ public class NotificationService {
     }
 
     // కస్టమర్లందరి FCM టోకెన్లకు ఫైర్‌బేస్ ద్వారా పుష్ నోటిఫికేషన్ పంపే మెథడ్
+ // కస్టమర్లందరి FCM టోకెన్లకు ఫైర్‌బేస్ ద్వారా పుష్ నోటిఫికేషన్ పంపే మెథడ్
     private void sendPushNotificationToAllCustomers(String title, String body, String imageUrl) {
         try {
             List<Customer> customers = customerRepository.findAll();
             for (Customer customer : customers) {
+                // 🌟 ఇక్కడ customer.getFcmToken() అని వాడాలి
                 if (customer.getFcmToken() != null && !customer.getFcmToken().isEmpty()) {
                     
                     com.google.firebase.messaging.Notification.Builder notifBuilder = 
@@ -97,8 +99,17 @@ public class NotificationService {
                     }
 
                     Message message = Message.builder()
-                            .setToken(customer.getFcmToken())
+                            .setToken(customer.getFcmToken()) // 👈 సరిగ్గా ఇక్కడ కూడా
                             .setNotification(notifBuilder.build())
+                            .setAndroidConfig(com.google.firebase.messaging.AndroidConfig.builder()
+                                .setPriority(com.google.firebase.messaging.AndroidConfig.Priority.HIGH)
+                                .setNotification(com.google.firebase.messaging.AndroidNotification.builder()
+                                    .setChannelId("foodiee_channel")
+                                    .setSound("default")
+                                    .setDefaultSound(true)
+                                    .setDefaultVibrateTimings(true)
+                                    .build())
+                                .build())
                             .putData("click_action", "https://foodiee.shop")
                             .build();
 
@@ -110,7 +121,6 @@ public class NotificationService {
             e.printStackTrace();
         }
     }
-
     public List<Notification> getAllNotifications() {
         return notificationRepository.findAllByOrderByTimestampDesc();
     }

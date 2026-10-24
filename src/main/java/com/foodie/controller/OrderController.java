@@ -8,7 +8,10 @@ import com.foodie.repository.CustomerRepository;
 import com.foodie.repository.DeliveryPartnerRepository; // ఇది ఇంపార్టెంట్
 import com.foodie.repository.OrderRepository;
 import com.foodie.repository.UserRepository;
+import com.foodie.service.FirebaseMessagingService;
 import com.foodie.service.NotificationService;
+import com.foodie.service.OrderAssignmentService;
+import com.foodie.service.OrderService;
 import com.foodie.service.WhatsAppNotificationService;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,145 +51,77 @@ public class OrderController {
 	@Autowired
 	private NotificationService notificationService;
 	
+	@Autowired
+    private FirebaseMessagingService firebaseMessagingService;
+	
+	@Autowired
+	private OrderService orderAssignmentService;
+	
 
 
 	// కొత్త ఆర్డర్ క్రియేట్ చేయడానికి / ప్లేస్ చేయడానికి (POST API)
-		@PostMapping({ "/create", "/place" })
-		public ResponseEntity<Order> createOrder(@RequestBody Order order) {
-			if (order.getStatus() == null) {
-				order.setStatus("Pending Approval");
-			}
-
-			// కస్టమర్ పేరు లేకపోతే యూజర్ రిపాజిటరీ నుండి ఫెచ్ చేసి సెట్ చేయడం
-			if (order.getCustomerName() == null || order.getCustomerName().trim().isEmpty()) {
-				User existingUser = userRepository.findFirstByMobile(order.getCustomerMobile());
-				if (existingUser != null && existingUser.getName() != null) {
-					order.setCustomerName(existingUser.getName());
-				} else {
-					order.setCustomerName("Guest Customer");
-				}
-			}
-
-			// ========================================================
-			// ✅ 1. FIRST ORDER FREE & PROMO CODE VALIDATION
-			// ========================================================
-			String customerMobile = order.getCustomerMobile();
-			String promoCode = order.getPromoCode();
-
-			// 1. మొదటి ఆర్డర్ అయితే డెలివరీ ఫీజు ఫ్రీ చేయడం
-			long previousOrdersCount = orderRepository.countByCustomerMobile(customerMobile);
-			if (previousOrdersCount == 0) {
-			    order.setDeliveryFee(0.0);
-			}
-
-			// 2. ప్రోమో కోడ్ వాలిడేషన్ (ఒక యూజర్‌కి ఒక కోడ్ ఒక్కసారే వాడాలి)
-			if (promoCode != null && !promoCode.trim().isEmpty()) {
-			    String cleanPromo = promoCode.trim().toUpperCase();
-			    order.setPromoCode(cleanPromo);
-
-			    boolean alreadyUsed = orderRepository.existsByCustomerMobileAndPromoCode(customerMobile, cleanPromo);
-			    if (alreadyUsed) {
-			        // కూపన్ ఇప్పటికే వాడి ఉంటే ఎర్రర్ రెస్పాన్స్ పంపడం
-			        return ResponseEntity.status(400).body(null); 
-			    }
-			}
-
-			// 3. 4-అంకెల డెలివరీ OTP ఆటోమేటిక్‌గా క్రియేట్ అవ్వడం
-			if (order.getDeliveryOtp() == null || order.getDeliveryOtp().trim().isEmpty()) {
-			    String randomOtp = String.format("%04d", (int)(Math.random() * 10000));
-			    order.setDeliveryOtp(randomOtp);
-			}
-
-			// 4. అన్నీ సరిగ్గా ఉంటే ఒకేసారి ఆర్డర్‌ని డేటాబేస్‌లో సేవ్ చేయడం
-			Order savedOrder = orderRepository.save(order);
-
-			// ========================================================
-			// ✅ 2. WHATSAPP NOTIFICATION INTEGRATION (DUAL MESSAGES)
-			// ========================================================
-			try {
-			    whatsAppNotificationService.sendOrderConfirmationToWhatsApp(
-			        savedOrder.getCustomerMobile(), 
-			        savedOrder.getId(), 
-			        savedOrder.getShopName(), 
-			        savedOrder.getItems(), 
-			        savedOrder.getDeliveryAddress(), 
-			        savedOrder.getTotalAmount(), 
-			        savedOrder.getTransactionId()
-			    );
-
-			    whatsAppNotificationService.sendOtpToWhatsApp(
-			        savedOrder.getCustomerMobile(), 
-			        savedOrder.getDeliveryOtp(), 
-			        savedOrder.getId()
-			    );
-			} catch (Exception e) {
-			    System.err.println("Instant WhatsApp notification failed: " + e.getMessage());
-			}
-
-			// నిర్దిష్టమైన షాప్ ఓనర్‌కి పాప్-అప్ నోటిఫికేషన్ పంపడం
-			if (savedOrder.getShopId() != null) {
-				messagingTemplate.convertAndSend("/topic/shop/" + savedOrder.getShopId(), savedOrder);
-				messagingTemplate.convertAndSend("/topic/shop/orders/" + savedOrder.getShopId(), savedOrder);
-			}
-
-			// ========================================================
-						// 🌟 2.1. FIREBASE PUSH NOTIFICATION FOR ORDER CREATION (NEW)
-						// ========================================================
-						try {
-						    if (savedOrder.getCustomerMobile() != null) {
-						        Customer customer = customerRepository.findByMobile(savedOrder.getCustomerMobile());
-						        if (customer != null && customer.getFcmToken() != null && !customer.getFcmToken().isEmpty()) {
-						            String title = "Order Placed Successfully! 🎉";
-						            String body = "Your order #" + savedOrder.getId() + " has been placed and is pending approval.";
-						            
-						            // NotificationService ద్వారా కస్టమర్‌కి పుష్ నోటిఫికేషన్ పంపడం
-						            notificationService.sendPushNotificationToCustomer(
-						                customer.getFcmToken(), 
-						                title, 
-						                body, 
-						                savedOrder.getImageUrl()
-						            );
-						        }
-						    }
-						} catch (Exception e) {
-						    System.err.println("Firebase order placement push notification failed: " + e.getMessage());
-						}
-			// ========================================================
-			// ✅ 3. SMART NEARBY DELIVERY ASSIGNMENT (Using Haversine Formula)
-			// ========================================================
-			try {
-				Double shopLat = savedOrder.getShopLat();
-				Double shopLng = savedOrder.getShopLng();
-
-				List<DeliveryPartner> availablePartners = null;
-
-				if (shopLat != null && shopLng != null) {
-					double radiusInKm = 10.0;
-					availablePartners = deliveryPartnerRepository.findAvailablePartnersNearby(shopLat, shopLng, radiusInKm);
-				}
-
-				if (availablePartners == null || availablePartners.isEmpty()) {
-					availablePartners = deliveryPartnerRepository.findByIsOnlineTrueAndIsBusyFalse();
-				}
-
-				if (availablePartners != null && !availablePartners.isEmpty()) {
-					DeliveryPartner assignedPartner = availablePartners.get(0);
-
-					savedOrder.setDeliveryPartnerId(assignedPartner.getId());
-					orderRepository.save(savedOrder);
-
-					messagingTemplate.convertAndSend("/topic/delivery/orders/" + assignedPartner.getId(), savedOrder);
-					
-					System.out.println("Order assigned exclusively to nearby partner ID: " + assignedPartner.getId());
-				} else {
-					System.out.println("No delivery partners available nearby right now.");
-				}
-			} catch (Exception e) {
-				System.err.println("Smart partner assignment failed: " + e.getMessage());
-			}
-
-			return ResponseEntity.ok(savedOrder);
+	@PostMapping({ "/create", "/place" })
+	public ResponseEntity<Order> createOrder(@RequestBody Order order) {
+		if (order.getStatus() == null) {
+			order.setStatus("Pending"); // 👈 మొదట Pending లో ఉంచాలి (అప్పుడే అసైన్‌మెంట్ కరెక్ట్‌గా జరుగుతుంది)
 		}
+
+		// కస్టమర్ పేరు లేకపోతే యూజర్ రిపాజిటరీ నుండి ఫెచ్ చేసి సెట్ చేయడం
+		if (order.getCustomerName() == null || order.getCustomerName().trim().isEmpty()) {
+			User existingUser = userRepository.findFirstByMobile(order.getCustomerMobile());
+			if (existingUser != null && existingUser.getName() != null) {
+				order.setCustomerName(existingUser.getName());
+			} else {
+				order.setCustomerName("Guest Customer");
+			}
+		}
+
+		// 1. మొదటి ఆర్డర్ అయితే డెలివరీ ఫీజు ఫ్రీ చేయడం
+		String customerMobile = order.getCustomerMobile();
+		long previousOrdersCount = orderRepository.countByCustomerMobile(customerMobile);
+		if (previousOrdersCount == 0) {
+			order.setDeliveryFee(0.0);
+		}
+
+		// 2. ప్రోమో కోడ్ వాలిడేషన్
+		String promoCode = order.getPromoCode();
+		if (promoCode != null && !promoCode.trim().isEmpty()) {
+			String cleanPromo = promoCode.trim().toUpperCase();
+			order.setPromoCode(cleanPromo);
+
+			boolean alreadyUsed = orderRepository.existsByCustomerMobileAndPromoCode(customerMobile, cleanPromo);
+			if (alreadyUsed) {
+				return ResponseEntity.status(400).body(null); 
+			}
+		}
+
+		// 3. 4-అంకెల డెలివరీ OTP ఆటోమేటిక్‌గా క్రియేట్ అవ్వడం
+		if (order.getDeliveryOtp() == null || order.getDeliveryOtp().trim().isEmpty()) {
+			String randomOtp = String.format("%04d", (int)(Math.random() * 10000));
+			order.setDeliveryOtp(randomOtp);
+		}
+
+		// 4. ఆర్డర్‌ని డేటాబేస్‌లో సేవ్ చేయడం
+		Order savedOrder = orderRepository.save(order);
+
+		// ========================================================
+		// 🚀 SMART 1-BY-1 DELIVERY PARTNER ASSIGNMENT (NEW LOGIC)
+		// ========================================================
+		try {
+			// అందరికీ ఒకేసారికాకుండా, లొకేషన్ బేస్డ్ ఖాళీగా ఉన్న ఒక్క రైడర్‌కి మాత్రమే పంపిస్తుంది
+			orderAssignmentService.assignOrderToAppropriatePartner(savedOrder.getId());
+		} catch (Exception e) {
+			System.err.println("Smart partner assignment failed: " + e.getMessage());
+		}
+
+		// షాప్ ఓనర్‌కి పాప్-అప్ నోటిఫికేషన్ పంపడం
+		if (savedOrder.getShopId() != null) {
+			messagingTemplate.convertAndSend("/topic/shop/" + savedOrder.getShopId(), savedOrder);
+			messagingTemplate.convertAndSend("/topic/shop/orders/" + savedOrder.getShopId(), savedOrder);
+		}
+
+		return ResponseEntity.ok(savedOrder);
+	}
 	// కస్టమర్ మొబైల్ నంబర్ ఆధారంగా ఆర్డర్ హిస్టరీ చూడటానికి (GET API)
 	@GetMapping("/customer/{mobile}")
 	public ResponseEntity<List<Order>> getOrdersByCustomer(@PathVariable String mobile) {
@@ -305,32 +240,32 @@ public class OrderController {
 	
 	
 	// ఆర్డర్ స్టేటస్ అప్‌డేట్ చేయడానికి మరియు కస్టమర్‌కి పుష్ నోటిఫికేషన్ పంపడానికి (PUT API)
-		@PutMapping({"/status/{orderId}", "/update-status/{orderId}"})
-		public ResponseEntity<?> updateOrderStatus(@PathVariable Long orderId, @RequestParam String status) {
-			Order order = orderRepository.findById(orderId).orElse(null);
-			if (order == null) {
-				return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
-			}
+	@PutMapping({"/status/{orderId}", "/update-status/{orderId}"})
+	public ResponseEntity<?> updateOrderStatus(@PathVariable Long orderId, @RequestParam String status) {
+	    Order order = orderRepository.findById(orderId).orElse(null);
+	    if (order == null) {
+	        return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
+	    }
 
-			order.setStatus(status); // ఉదాహరణకు: "Out for Delivery"
-			orderRepository.save(order);
+	    order.setStatus(status); // ఉదాహరణకు: "Out for Delivery"
+	    orderRepository.save(order);
 
-			// వెబ్‌సాకెట్ ద్వారా రియల్-టైమ్ అప్‌డేట్ పంపడం
-			messagingTemplate.convertAndSend("/topic/order/status/" + orderId, status);
+	    // వెబ్‌సాకెట్ ద్వారా రియల్-టైమ్ అప్‌డేట్ పంపడం
+	    messagingTemplate.convertAndSend("/topic/order/status/" + orderId, status);
 
-			// 🌟 కస్టమర్‌కి ఆటోమేటిక్‌గా పుష్ నోటిఫికేషన్ పంపడం
-			String customerMobile = order.getCustomerMobile();
-	        if (customerMobile != null && !customerMobile.isEmpty()) {
-	            Customer customer = customerRepository.findFirstByMobile(customerMobile);
-	            if (customer != null && customer.getFcmToken() != null && !customer.getFcmToken().isEmpty()) {
-	                String title = "Arriving Shortly";
-	                String body = "Your order #" + orderId + " is " + status.toLowerCase() + "!";
-	                
-	                // NotificationService లోని మెథడ్‌ని కాల్ చేయడం
-	                notificationService.sendPushNotificationToCustomer(customer.getFcmToken(), title, body, order.getImageUrl());
-	            }
+	    // 🌟 కస్టమర్‌కి ఆటోమేటిక్‌గా పుష్ నోటిఫికేషన్ పంపడం (UserRepository ఉపయోగించి)
+	    String customerMobile = order.getCustomerMobile();
+	    if (customerMobile != null && !customerMobile.isEmpty()) {
+	        User customer = userRepository.findFirstByMobile(customerMobile); // 👈 Customer బదులుగా User వాడాలి
+	        if (customer != null && customer.getFcmToken() != null && !customer.getFcmToken().isEmpty()) {
+	            String title = "Arriving Shortly";
+	            String body = "Your order #" + orderId + " is " + status.toLowerCase() + "!";
+	            
+	            // NotificationService లోని మెథడ్‌ని కాల్ చేయడం
+	            notificationService.sendPushNotificationToCustomer(customer.getFcmToken(), title, body, order.getImageUrl());
 	        }
+	    }
 
-			return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Order status updated & notification sent"));
-		}
+	    return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Order status updated & notification sent"));
+	}
 }

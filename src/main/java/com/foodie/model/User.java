@@ -29,10 +29,22 @@ public class User {
 
     // 🌟 కొత్తగా యాడ్ చేయవలసిన ఫీల్డ్ (అడ్మిన్ యాప్ & వాలెట్ సింక్ కోసం)
     private Double walletBalance = 0.0; 
+    
+ // 🌟 కొత్తగా యాడ్ చేయవలసిన FCM Token ఫీల్డ్
+    @Column(length = 500)
+    private String fcmToken;
 
     // --- Getters and Setters ---
     
-    public String getMobile() {
+    public String getFcmToken() {
+		return fcmToken;
+	}
+
+	public void setFcmToken(String fcmToken) {
+		this.fcmToken = fcmToken;
+	}
+
+	public String getMobile() {
         return mobile;
     }
 
@@ -44,7 +56,15 @@ public class User {
         return name;
     }
 
-    public void setName(String name) {
+    public Boolean getIsActive() {
+		return isActive;
+	}
+
+	public void setIsActive(Boolean isActive) {
+		this.isActive = isActive;
+	}
+
+	public void setName(String name) {
         this.name = name;
     }
 

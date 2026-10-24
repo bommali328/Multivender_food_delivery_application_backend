@@ -5,8 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface UserRepository extends JpaRepository<User, String> { // 👈 ఇక్కడ String ఉండాలి (ఎందుకంటే mobile టైప్ String కాబట్టి)
-    
-    // ఒకవేళ టేబుల్‌లో ఎక్కడైనా డూప్లికేట్స్ ఉన్నా క్రాష్ అవ్వకుండా ఉండటానికి
+public interface UserRepository extends JpaRepository<User, String> {
+    User findByMobile(String mobile);
     User findFirstByMobile(String mobile);
 }
