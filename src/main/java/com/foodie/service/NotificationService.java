@@ -71,6 +71,7 @@ public class NotificationService {
                     .setToken(fcmToken)
                     .setNotification(notifBuilder.build())
                     .putData("click_action", "https://foodiee.shop")
+                    .putData("image", imageUrl != null ? imageUrl : "") // 👈 ఇక్కడ డేటా కీ యాడ్ చేయాలి[cite: 16]
                     .build();
 
             FirebaseMessaging.getInstance().send(message);
@@ -99,7 +100,7 @@ public class NotificationService {
                     }
 
                     Message message = Message.builder()
-                            .setToken(customer.getFcmToken()) // 👈 సరిగ్గా ఇక్కడ కూడా
+                            .setToken(customer.getFcmToken()) 
                             .setNotification(notifBuilder.build())
                             .setAndroidConfig(com.google.firebase.messaging.AndroidConfig.builder()
                                 .setPriority(com.google.firebase.messaging.AndroidConfig.Priority.HIGH)
@@ -111,6 +112,7 @@ public class NotificationService {
                                     .build())
                                 .build())
                             .putData("click_action", "https://foodiee.shop")
+                            .putData("image", imageUrl != null ? imageUrl : "") // 👈 ఇక్కడ కూడా డేటా కీ యాడ్ చేయాలి[cite: 16]
                             .build();
 
                     FirebaseMessaging.getInstance().send(message);
