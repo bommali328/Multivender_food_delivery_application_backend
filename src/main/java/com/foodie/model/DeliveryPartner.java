@@ -28,7 +28,18 @@ public class DeliveryPartner {
 
     private String otp;
     
-    private Double latitude = 0.0;
+    private String fcmToken;
+    public boolean isAdminApproved() {
+		return adminApproved;
+	}
+
+	public void setAdminApproved(boolean adminApproved) {
+		this.adminApproved = adminApproved;
+	}
+	private boolean adminApproved = false;
+    
+	
+	private Double latitude = 0.0;
     private Double longitude = 0.0;
     
     private boolean isOnline = false;        
@@ -102,6 +113,14 @@ public class DeliveryPartner {
     }
 
     // --- Existing Getters and Setters ---
+    
+    public String getFcmToken() {
+		return fcmToken;
+	}
+
+	public void setFcmToken(String fcmToken) {
+		this.fcmToken = fcmToken;
+	}
     
     public String getAadhaarUrl() { return aadhaarUrl; }
     public void setAadhaarUrl(String aadhaarUrl) { this.aadhaarUrl = aadhaarUrl; }

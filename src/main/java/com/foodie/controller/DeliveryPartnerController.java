@@ -144,6 +144,20 @@ public class DeliveryPartnerController {
 			return ResponseEntity.badRequest().body(Map.of("status", "error", "message", e.getMessage()));
 		}
 	}
+	
+	@PostMapping("/partner/update-fcm-token")
+	public ResponseEntity<?> updatePartnerFcmToken(@RequestBody Map<String, String> payload) {
+	    String mobile = payload.get("mobile");
+	    String fcmToken = payload.get("fcmToken");
+	    
+	    DeliveryPartner partner = deliveryPartnerRepository.findByMobile(mobile).orElse(null);
+	    if (partner != null) {
+	        partner.setFcmToken(fcmToken);
+	        deliveryPartnerRepository.save(partner);
+	        return ResponseEntity.ok(Map.of("status", "success", "message", "Partner FCM token updated"));
+	    }
+	    return ResponseEntity.status(404).body(Map.of("error", "Partner not found"));
+	}
 
 	// 2. పార్టనర్ ప్రొఫైల్ మరియు డాక్యుమెంట్స్ (KYC) ఫైల్స్ తో సహా అప్‌డేట్ చేయడానికి
 	@PutMapping("/partner/update-with-docs/{id}")

@@ -1,11 +1,13 @@
 package com.foodie.controller;
 
+import com.foodie.model.MenuItem;
 import com.foodie.model.Shop;
 import org.springframework.http.MediaType;
 import com.foodie.repository.ShopRepository;
 import com.foodie.service.ShopService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -15,6 +17,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -27,6 +30,12 @@ public class ShopController {
 
 	@Autowired
 	private ShopService shopService;
+	
+	@Autowired
+    private com.foodie.repository.MenuRepository menuRepository; // 👈 ఇక్కడ డిక్లేర్ చేయాలి
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
 
 	private static final String UPLOAD_DIR = "uploads/";
 
@@ -164,7 +173,58 @@ public class ShopController {
 			return ResponseEntity.status(500).body("Error uploading images: " + e.getMessage());
 		}
 	}
+	
+	// 8. షాప్ ఓపెన్ లేదా క్లోజ్ స్టేటస్ మార్చడానికి (Toggle Shop Open/Close)
+		@PutMapping("/status/toggle/{id}")
+		public ResponseEntity<?> toggleShopOpenStatus(@PathVariable Long id, @RequestParam boolean shopOpen) {
+			Optional<Shop> shopOpt = shopRepository.findById(id);
+			if (shopOpt.isPresent()) {
+				Shop shop = shopOpt.get();
+				shop.setShopOpen(shopOpen); // Shop model లో ఉన్న setter
+				shopRepository.save(shop);
+				return ResponseEntity.ok(Map.of(
+					"status", "success", 
+					"message", "Shop open status updated successfully",
+					"shopOpen", shop.isShopOpen()
+				));
+			}
+			return ResponseEntity.status(404).body("Shop not found");
+		}
+		
+		@PostMapping("/shop/update-fcm-token")
+		public ResponseEntity<?> updateShopFcmToken(@RequestBody Map<String, String> payload) {
+		    String mobile = payload.get("mobile");
+		    String fcmToken = payload.get("fcmToken");
+		    
+		    Shop shop = shopRepository.findByMobile(mobile);
+		    if (shop != null) {
+		        shop.setFcmToken(fcmToken);
+		        shopRepository.save(shop);
+		        return ResponseEntity.ok(Map.of("status", "success", "message", "Shop FCM token updated"));
+		    }
+		    return ResponseEntity.status(404).body(Map.of("error", "Shop not found"));
+		}
 
+		@PutMapping("/api/food/status/{id}")
+	    public ResponseEntity<?> updateFoodStockStatus(@PathVariable Long id, @RequestBody Map<String, Boolean> payload) {
+	        Optional<MenuItem> foodOpt = menuRepository.findById(id);
+	        if (foodOpt.isPresent()) {
+	            MenuItem food = foodOpt.get();
+	            Boolean available = payload.get("available");
+	            
+	            if (available != null) {
+	                food.setAvailable(available);
+	                menuRepository.save(food);
+	                
+	                // రియల్-టైమ్ సింక్ కోసం వెబ్‌సాకెట్ అలర్ట్
+	                messagingTemplate.convertAndSend("/topic/shop/menu-update", food);
+	                
+	                return ResponseEntity.ok(Map.of("status", "success", "available", food.isAvailable()));
+	            }
+	            return ResponseEntity.badRequest().body(Map.of("error", "Invalid payload"));
+	        }
+	        return ResponseEntity.status(404).body(Map.of("error", "Food item not found"));
+	    }
 	// ==========================================
 	// 🛡️ ADMIN PANEL ENDPOINTS
 	// ==========================================
@@ -182,4 +242,6 @@ public class ShopController {
 		}
 		return ResponseEntity.status(404).body("Shop not found");
 	}
+	
 }
+

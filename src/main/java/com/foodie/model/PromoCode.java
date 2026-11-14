@@ -14,6 +14,9 @@ public class PromoCode {
     private String discount;
     private String minOrder;
     private boolean isActive = true;
+    
+    // ✅ కొత్తగా యాడ్ చేయవలసిన ఫీల్డ్ (కూపన్ వాడేశారా లేదా అని చెక్ చేయడానికి)
+    private boolean isUsed = false;
 
     // Getters and Setters
     public Long getId() { return id; }
@@ -30,4 +33,8 @@ public class PromoCode {
 
     public boolean isActive() { return isActive; }
     public void setActive(boolean active) { isActive = active; }
+
+    // ✅ isUsed కోసం Getters & Setters
+    public boolean isUsed() { return isUsed; }
+    public void setUsed(boolean used) { isUsed = used; }
 }

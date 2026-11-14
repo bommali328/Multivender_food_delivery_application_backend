@@ -53,6 +53,10 @@ public class AdminController {
 	private com.google.firebase.messaging.FirebaseMessaging firebaseMessaging;
 	
 	private static final Map<Long, Double> shopCommissionMap = new HashMap<>();
+	
+	private String adminOtpCode = "";
+	private java.time.Instant adminOtpExpiryTime = null;
+	private final String SECURE_ADMIN_MOBILE = "7893521159";
 
 	@GetMapping("/admin/customers/all")
 	public ResponseEntity<List<User>> getAllCustomers() {
@@ -272,6 +276,26 @@ public class AdminController {
 		} catch (Exception e) {
 			System.err.println("WebSocket Admin Chat Error: " + e.getMessage());
 		}
+	}
+	
+	
+	@PostMapping("/admin/auth/send-otp")
+	public ResponseEntity<?> sendAdminOtp(@RequestBody Map<String, String> payload) {
+	    String password = payload.get("password");
+	    String SECURE_ADMIN_PASSWORD = "Foodiee@Admin2026";
+
+	    // పాస్‌వర్డ్ సరిచూసుకోవడం (Trim మరియు Safe Check)
+	    if (password != null && password.trim().equals(SECURE_ADMIN_PASSWORD)) {
+	        String adminOtpCode = String.format("%04d", new java.util.Random().nextInt(10000));
+	        
+	        // టెంపరీగా ఇక్కడ సక్సెస్ రెస్పాన్స్ ఇద్దాం, తద్వారా 500 ఎర్రర్ రాదు
+	        return ResponseEntity.ok(Map.of(
+	            "status", "SUCCESS",
+	            "message", "OTP generated successfully",
+	            "otp", adminOtpCode // టెస్టింగ్ కోసం లాగ్‌లో లేదా రెస్పాన్స్‌లో చూసుకోవచ్చు
+	        ));
+	    }
+	    return ResponseEntity.status(401).body(Map.of("error", "తప్పు పాస్‌వర్డ్! దయచేసి సరైన పాస్‌వర్డ్ ఎంటర్ చేయండి."));
 	}
 
 	@PutMapping("/admin/partner/kyc/verify/{partnerId}")

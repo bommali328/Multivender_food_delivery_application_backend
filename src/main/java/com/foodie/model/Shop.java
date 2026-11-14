@@ -31,9 +31,17 @@ public class Shop {
     
     private boolean shopOpen = true;
     
+    private String fcmToken;
     
     
-    public boolean isShopOpen() {
+    
+    public String getFcmToken() {
+		return fcmToken;
+	}
+	public void setFcmToken(String fcmToken) {
+		this.fcmToken = fcmToken;
+	}
+	public boolean isShopOpen() {
 		return shopOpen;
 	}
 	public void setShopOpen(boolean shopOpen) {

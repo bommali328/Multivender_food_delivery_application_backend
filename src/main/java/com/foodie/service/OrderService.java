@@ -59,7 +59,10 @@ public class OrderService {
         }
 
         // Online lo unna, alane isBusy = false ga unna partners ni techukovadam
-        List<DeliveryPartner> availablePartners = partnerRepository.findByIsOnlineTrueAndIsBusyFalse();
+        List<DeliveryPartner> availablePartners = partnerRepository.findByIsOnlineTrueAndIsBusyFalse()
+                .stream()
+                .filter(p -> p.isAdminApproved()) // 👈 అడ్మిన్ అప్రూవల్ చెక్
+                .collect(Collectors.toList());
 
         if (availablePartners.isEmpty()) {
             order.setStatus("No Partner Available");

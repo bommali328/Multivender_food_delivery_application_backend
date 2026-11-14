@@ -13,6 +13,7 @@ public class MenuItem {
     private String itemName;
     private Double price;
     private String category;
+    @Column(length = 500)
     private String description;
     @Column(columnDefinition = "LONGTEXT")
     private String imageUrl;

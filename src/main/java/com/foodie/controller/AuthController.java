@@ -1,9 +1,12 @@
 package com.foodie.controller;
 
 import com.foodie.model.DeliveryPartner;
+import com.foodie.model.PromoCode;
 import com.foodie.model.Shop;
 import com.foodie.model.User;
 import com.foodie.repository.DeliveryPartnerRepository;
+import com.foodie.repository.OrderRepository;
+import com.foodie.repository.PromoCodeRepository;
 import com.foodie.repository.ShopRepository;
 import com.foodie.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 
 @RestController
@@ -21,12 +25,18 @@ public class AuthController {
 
 	@Autowired
 	private UserRepository userRepository;
+	
+	@Autowired
+	private OrderRepository orderRepository;
 
 	@Autowired
 	private ShopRepository shopRepository;
 
 	@Autowired
 	private DeliveryPartnerRepository partnerRepository;
+	
+	@Autowired
+	private PromoCodeRepository promoCodeRepository;
 
 	// ✅ 100% Free WhatsApp PIN storage for forgot password
 	private final Map<String, String> whatsappPinStorage = new HashMap<>();
@@ -340,6 +350,49 @@ public class AuthController {
 		}
 
 		return ResponseEntity.ok(new OtpResponse("OTP sent successfully", generatedOtp));
+	}
+	
+	@PostMapping("/promos/apply")
+	public ResponseEntity<?> applyPromoCode(@RequestBody Map<String, String> request) {
+		String code = request.get("code");
+		String customerMobile = request.get("mobile"); // 👈 కస్టమర్ మొబైల్ నంబర్‌ను తీసుకోవడం
+		
+		if (code == null || code.trim().isEmpty()) {
+			return ResponseEntity.badRequest().body(Map.of("error", "దయచేసి కూపన్ కోడ్ ఎంటర్ చేయండి."));
+		}
+
+		String cleanPromo = code.trim().toUpperCase();
+
+		// 1. ఈ కస్టమర్ ఆల్రెడీ ఈ ప్రోమో కోడ్‌ని గతంలో వాడేశారా లేదా అని చెక్ చేయడం
+		if (customerMobile != null && !customerMobile.trim().isEmpty()) {
+			boolean alreadyUsedByThisCustomer = orderRepository.existsByCustomerMobileAndPromoCode(customerMobile.trim(), cleanPromo);
+			if (alreadyUsedByThisCustomer) {
+				return ResponseEntity.badRequest().body(Map.of("error", "ఈ ప్రోమో కోడ్ మీరు ఇప్పటికే ఒకసారి వాడుకున్నారు!"));
+			}
+		}
+
+		Optional<PromoCode> promoOpt = promoCodeRepository.findByCode(cleanPromo);
+
+		if (promoOpt.isPresent()) {
+			PromoCode promo = promoOpt.get();
+
+			// 2. కూపన్ జనరల్‌గా యాక్టివ్‌గా ఉందా లేదా చెక్ చేయడం
+			if (!promo.isActive()) {
+				return ResponseEntity.badRequest().body(Map.of("error", "ఈ కూపన్ ఎక్స్‌పైర్ అయింది లేదా యాక్టివ్‌లో లేదు."));
+			}
+
+			// గమనిక: ఇక్కడ promo.setUsed(true) పెట్టకూడదు. 
+			// ఎందుకంటే ఇది గ్లోబల్ గ్లోబల్ అయిపోతుంది. కస్టమర్ ఆర్డర్ ప్లేస్ చేసినప్పుడు 
+			// OrderRepository ద్వారా ఆటోమేటిక్‌గా ట్రాక్ చేయబడుతుంది.
+
+			return ResponseEntity.ok(Map.of(
+				"status", "success",
+				"message", "కూపన్ విజయవంతంగా వర్తింపజేయబడింది!",
+				"discount", promo.getDiscount()
+			));
+		}
+
+		return ResponseEntity.status(404).body(Map.of("error", "తప్పు కూపన్ కోడ్ (Invalid Promo Code)."));
 	}
 
 	@PostMapping("/verify-otp")

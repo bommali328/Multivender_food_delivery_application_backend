@@ -1,6 +1,5 @@
 package com.foodie.model;
 
-
 import java.time.LocalDateTime;
 import jakarta.persistence.*;
 
@@ -91,7 +90,23 @@ public class Order {
     public void setCustomerName(String customerName) { this.customerName = customerName; }
 
     public String getCustomerMobile() { return customerMobile; }
-    public void setCustomerMobile(String customerMobile) { this.customerMobile = customerMobile; }
+    
+    public void setCustomerMobile(String customerMobile) { 
+        this.customerMobile = customerMobile; 
+    }
+
+    // 👇 యాప్ నుండి 'mobile' లేదా 'phone' అని వస్తే దాన్ని ఆటోమేటిక్‌గా హ్యాండ్ చేయడానికి ఇవి సహాయపడతాయి
+    public void setMobile(String mobile) {
+        if (this.customerMobile == null || this.customerMobile.isEmpty()) {
+            this.customerMobile = mobile;
+        }
+    }
+
+    public void setPhone(String phone) {
+        if (this.customerMobile == null || this.customerMobile.isEmpty()) {
+            this.customerMobile = phone;
+        }
+    }
 
     public String getDeliveryAddress() { return deliveryAddress; }
     public void setDeliveryAddress(String deliveryAddress) { this.deliveryAddress = deliveryAddress; }
@@ -150,9 +165,4 @@ public class Order {
 	public String getImageUrl() {
 		return imageUrl;
 	}
-
-
-	
-
-	
 }

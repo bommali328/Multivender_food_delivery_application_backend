@@ -2,6 +2,8 @@ package com.foodie.controller;
 
 import com.foodie.model.ScratchCard;
 import com.foodie.repository.ScratchCardRepository;
+import com.foodie.repository.UserRepository;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,6 +21,9 @@ public class ScratchCardController {
 
     @Autowired
     private ScratchCardRepository scratchCardRepository;
+    
+    @Autowired
+    private UserRepository userRepository;
 
     // 1. కస్టమర్ యొక్క అన్ని స్క్రాచ్ కార్డ్స్ ఫెచ్ చేయడానికి
  // 1. కస్టమర్ యొక్క అన్ని స్క్రాచ్ కార్డ్స్ ఫెచ్ చేయడానికి
@@ -56,16 +61,40 @@ public class ScratchCardController {
         ScratchCard savedCard = scratchCardRepository.save(card);
         return ResponseEntity.ok(savedCard);
     }
+ 
 
-    // 3. స్క్రాచ్ కార్డ్ క్లెయిమ్ చేసి అమౌంట్ యాడ్ చేయడానికి
+    // 3. స్క్రాచ్ కార్డ్ క్లెయిమ్ చేసి అమౌంట్ వాలెట్‌కి యాడ్ చేయడానికి
     @PutMapping("/claim/{id}")
     public ResponseEntity<?> claimScratchCard(@PathVariable Long id) {
         ScratchCard card = scratchCardRepository.findById(id).orElse(null);
-        if (card != null && !card.isClaimed()) {
-            card.setClaimed(true);
-            scratchCardRepository.save(card);
-            return ResponseEntity.ok(Map.of("status", "success", "amount", card.getAmount()));
+        if (card == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Card not found"));
         }
-        return ResponseEntity.badRequest().body(Map.of("error", "Card not found or already claimed"));
+
+        if (card.isClaimed()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Card already claimed"));
+        }
+
+        // 1. కార్డ్‌ని క్లెయిమ్ చేసినట్లు మార్చడం
+        card.setClaimed(true);
+        scratchCardRepository.save(card);
+
+        // 2. కస్టమర్ వాలెట్ బ్యాలెన్స్‌కి అమౌంట్ యాడ్ చేయడం
+        com.foodie.model.User customer = userRepository.findFirstByMobile(card.getCustomerMobile());
+        if (customer != null) {
+            double currentWallet = customer.getWalletBalance() != null ? customer.getWalletBalance() : 0.0;
+            double newBalance = currentWallet + card.getAmount();
+            
+            customer.setWalletBalance(newBalance);
+            userRepository.save(customer); // వాలెట్ అప్‌డేట్ సేవ్ అవుతుంది
+
+            return ResponseEntity.ok(Map.of(
+                "status", "success", 
+                "amount", card.getAmount(),
+                "newWalletBalance", newBalance
+            ));
+        }
+
+        return ResponseEntity.badRequest().body(Map.of("error", "Customer not found for this scratch card"));
     }
 }
