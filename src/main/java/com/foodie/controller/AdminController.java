@@ -158,94 +158,72 @@ public class AdminController {
 		}
 	}
 
-	// ✅ Updated sendBroadcast to accept title, message, and image
-	@PostMapping(value = "/admin/broadcast", consumes = { "multipart/form-data" })
-	public ResponseEntity<?> sendBroadcast(
-			@RequestParam("target") String target,
-			@RequestParam(value = "title", defaultValue = "📢 Foodiee Announcement") String title,
-			@RequestParam("message") String message,
-			@RequestParam(value = "image", required = false) MultipartFile image) {
-		try {
-			String imageUrl = null;
-			if (image != null && !image.isEmpty()) {
-				imageUrl = "https://api.foodiee.shop/uploaded_images/" + image.getOriginalFilename();
-			}
+		@PostMapping("/admin/broadcast")
+		public ResponseEntity<?> sendBroadcast(
+				@RequestParam("target") String target,
+				@RequestParam(value = "title", defaultValue = "📢 Foodiee Announcement") String title,
+				@RequestParam("message") String message,
+				@RequestParam(value = "image", required = false) MultipartFile image) {
+			try {
+				String imageUrl = null;
+				if (image != null && !image.isEmpty()) {
+					imageUrl = "https://api.foodiee.shop/uploaded_images/" + image.getOriginalFilename();
+				}
 
-			Map<String, Object> payload = new HashMap<>();
-			payload.put("title", title);
-			payload.put("message", message);
-			payload.put("imageUrl", imageUrl);
+				Map<String, Object> payload = new HashMap<>();
+				payload.put("title", title);
+				payload.put("message", message);
+				payload.put("imageUrl", imageUrl);
 
-			if ("All Users".equalsIgnoreCase(target)) {
-				messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
-				messagingTemplate.convertAndSend("/topic/broadcast/shops", payload);
-				messagingTemplate.convertAndSend("/topic/broadcast/partners", payload);
-			} else if ("All Delivery Partners".equalsIgnoreCase(target)) {
-				messagingTemplate.convertAndSend("/topic/broadcast/partners", payload);
-			} else if ("All Shop Owners".equalsIgnoreCase(target)) {
-				messagingTemplate.convertAndSend("/topic/broadcast/shops", payload);
-			} else if ("All Customers".equalsIgnoreCase(target)) {
-				messagingTemplate.convertAndSend("/topic/broadcast/customers", payload);
-				
-				List<User> customers = userRepository.findAll();
-				for (User customer : customers) {
-					if (customer.getFcmToken() != null && !customer.getFcmToken().isEmpty() && firebaseMessaging != null) {
-						com.google.firebase.messaging.Message.Builder msgBuilder = com.google.firebase.messaging.Message.builder()
-								.setToken(customer.getFcmToken())
-								.setNotification(com.google.firebase.messaging.Notification.builder()
-										.setTitle(title)
-										.setBody(message)
-										.setImage(imageUrl)
-										.build())
-								.putData("image", imageUrl != null ? imageUrl : "");
-						
-						try {
-							firebaseMessaging.send(msgBuilder.build());
-						} catch (Exception e) {
-							System.err.println("FCM Push Error for " + customer.getMobile() + ": " + e.getMessage());
+				if ("All Users".equalsIgnoreCase(target)) {
+					messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
+					messagingTemplate.convertAndSend("/topic/broadcast/shops", payload);
+					messagingTemplate.convertAndSend("/topic/broadcast/partners", payload);
+				} else if ("All Delivery Partners".equalsIgnoreCase(target)) {
+					messagingTemplate.convertAndSend("/topic/broadcast/partners", payload);
+				} else if ("All Shop Owners".equalsIgnoreCase(target)) {
+					messagingTemplate.convertAndSend("/topic/broadcast/shops", payload);
+				} else if ("All Customers".equalsIgnoreCase(target) || "All Users".equalsIgnoreCase(target)) {
+					messagingTemplate.convertAndSend("/topic/broadcast/customers", payload);
+					
+					List<User> customers = userRepository.findAll();
+					for (User customer : customers) {
+						if (customer.getFcmToken() != null && !customer.getFcmToken().isEmpty() && firebaseMessaging != null) {
+							try {
+								com.google.firebase.messaging.Message.Builder msgBuilder = com.google.firebase.messaging.Message.builder()
+										.setToken(customer.getFcmToken())
+										.setNotification(com.google.firebase.messaging.Notification.builder()
+												.setTitle(title)
+												.setBody(message)
+												.setImage(imageUrl) // 👈 బిగ్ పిక్చర్ ఇమేజ్
+												.build())
+										.setAndroidConfig(com.google.firebase.messaging.AndroidConfig.builder()
+												.setPriority(com.google.firebase.messaging.AndroidConfig.Priority.HIGH)
+												.setNotification(com.google.firebase.messaging.AndroidNotification.builder()
+														.setColor("#FC8019") // 👈 ఆరెంజ్ కలర్
+														.build())
+												.build())
+										.putData("image", imageUrl != null ? imageUrl : "")
+										.putData("title", title)
+										.putData("message", message);
+								
+								firebaseMessaging.send(msgBuilder.build());
+							} catch (Exception e) {
+								System.err.println("FCM Push Error for customer: " + e.getMessage());
+							}
 						}
 					}
+				} else {
+					messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
 				}
-			} else {
-				messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
-			}
 
-			Map<String, String> response = new HashMap<>();
-			response.put("status", "success");
-			response.put("message", "Broadcast sent to " + target);
-			return ResponseEntity.ok(response);
+				return ResponseEntity.ok(Map.of("status", "success", "message", "Broadcast sent successfully"));
 
-		} catch (Exception e) {
-			Map<String, String> errorResponse = new HashMap<>();
-			errorResponse.put("status", "error");
-			errorResponse.put("message", e.getMessage());
-			return ResponseEntity.badRequest().body(errorResponse);
-		}
-	}
-
-	@PutMapping("/admin/promos/toggle/{idOrCode}")
-	public ResponseEntity<?> togglePromoStatus(@PathVariable String idOrCode,
-			@RequestBody Map<String, Boolean> request) {
-		Optional<PromoCode> promoOpt = Optional.empty();
-
-		try {
-			Long id = Long.valueOf(idOrCode);
-			promoOpt = promoCodeRepository.findById(id);
-		} catch (NumberFormatException e) {
-			promoOpt = promoCodeRepository.findByCode(idOrCode);
-		}
-
-		if (promoOpt.isPresent()) {
-			PromoCode promo = promoOpt.get();
-			Boolean isActive = request.get("isActive");
-			if (isActive != null) {
-				promo.setActive(isActive);
-				promoCodeRepository.save(promo);
-				return ResponseEntity.ok(Map.of("status", "success", "isActive", promo.isActive()));
+			} catch (Exception e) {
+				System.err.println("Broadcast Error: " + e.getMessage());
+				return ResponseEntity.status(500).body(Map.of("status", "error", "message", e.getMessage()));
 			}
 		}
-		return ResponseEntity.status(404).body(Map.of("error", "Promo code not found"));
-	}
 
 	@PostMapping("/set")
 	public ResponseEntity<?> setShopCommission(@RequestBody Map<String, Object> payload) {
@@ -278,25 +256,26 @@ public class AdminController {
 		}
 	}
 	
-	
-	@PostMapping("/admin/auth/send-otp")
-	public ResponseEntity<?> sendAdminOtp(@RequestBody Map<String, String> payload) {
-	    String password = payload.get("password");
-	    String SECURE_ADMIN_PASSWORD = "Foodiee@Admin2026";
+	// ✅ కేవలం పాస్‌వర్డ్ ద్వారా మాత్రమే డైరెక్ట్ అడ్మిన్ లాగిన్ (WhatsApp / OTP అవసరం లేదు)
+		@PostMapping("/admin/auth/login")
+		public ResponseEntity<?> adminLogin(@RequestBody Map<String, String> payload) {
+		    String password = payload.get("password");
+		    
+		    // మీ అడ్మిన్ పాస్‌వర్డ్ ఇక్కడ సెట్ చేయబడింది
+		    String SECURE_ADMIN_PASSWORD = "Foodiee@Admin2026";
 
-	    // పాస్‌వర్డ్ సరిచూసుకోవడం (Trim మరియు Safe Check)
-	    if (password != null && password.trim().equals(SECURE_ADMIN_PASSWORD)) {
-	        String adminOtpCode = String.format("%04d", new java.util.Random().nextInt(10000));
-	        
-	        // టెంపరీగా ఇక్కడ సక్సెస్ రెస్పాన్స్ ఇద్దాం, తద్వారా 500 ఎర్రర్ రాదు
-	        return ResponseEntity.ok(Map.of(
-	            "status", "SUCCESS",
-	            "message", "OTP generated successfully",
-	            "otp", adminOtpCode // టెస్టింగ్ కోసం లాగ్‌లో లేదా రెస్పాన్స్‌లో చూసుకోవచ్చు
-	        ));
-	    }
-	    return ResponseEntity.status(401).body(Map.of("error", "తప్పు పాస్‌వర్డ్! దయచేసి సరైన పాస్‌వర్డ్ ఎంటర్ చేయండి."));
-	}
+		    if (password != null && password.trim().equals(SECURE_ADMIN_PASSWORD)) {
+		        return ResponseEntity.ok(Map.of(
+		            "status", "SUCCESS",
+		            "message", "Admin login successful"
+		        ));
+		    }
+		    
+		    return ResponseEntity.status(401).body(Map.of(
+		        "status", "FAILED",
+		        "error", "తప్పు పాస్‌వర్డ్! దయచేసి సరైన పాస్‌వర్డ్ ఎంటర్ చేయండి."
+		    ));
+		}
 
 	@PutMapping("/admin/partner/kyc/verify/{partnerId}")
 	public ResponseEntity<?> verifyPartnerKyc(@PathVariable Long partnerId, @RequestBody Map<String, String> payload) {
@@ -319,7 +298,7 @@ public class AdminController {
 	public ResponseEntity<?> updateOrderStatus(@PathVariable Long orderId, @RequestBody Map<String, String> payload) {
 		Order order = orderRepository.findById(orderId).orElse(null);
 		if (order != null) {
-			String newStatus = payload.get("status");
+			String newStatus = payload.get("status"); // 👈 షాప్ లేదా పార్ట్నర్ అప్‌డేట్ చేసిన లైవ్ స్టేటస్
 			order.setStatus(newStatus);
 			orderRepository.save(order);
 
@@ -329,8 +308,20 @@ public class AdminController {
 			if (userOpt.isPresent() && userOpt.get().getFcmToken() != null && firebaseMessaging != null) {
 				String fcmToken = userOpt.get().getFcmToken();
 				
-				String title = "📦 Order Update: " + newStatus;
-				String body = "Your order #" + orderId + " is now " + newStatus.toLowerCase() + ".";
+				// 🌟 డైనమిక్ టైటిల్ మరియు లైవ్ స్టేటస్ మెసేజ్
+				String title = "🔥 𝙁𝙤𝙤𝙙𝙞𝙚𝙚 • Order #" + orderId;
+				String body = "📦 Your order status is now: " + newStatus + "! Tap to track 🛵";
+
+				// స్టేటస్‌కి తగినట్లుగా ప్రత్యేకమైన ఎమోజీలు మరియు మెసేజ్‌లు
+				if ("Preparing".equalsIgnoreCase(newStatus)) {
+					body = "👨‍🍳 Your food is being freshly prepared by the kitchen!";
+				} else if ("Picked Up".equalsIgnoreCase(newStatus)) {
+					body = "🛵 Delivery partner has picked up your order and is on the way!";
+				} else if ("Delivered".equalsIgnoreCase(newStatus)) {
+					body = "🎉 Your order has been delivered successfully. Enjoy your meal! 🍔";
+				} else if ("Out for Delivery".equalsIgnoreCase(newStatus)) {
+					body = "🚀 Your order is out for delivery and arriving shortly!";
+				}
 
 				try {
 					com.google.firebase.messaging.Message message = com.google.firebase.messaging.Message.builder()
@@ -338,6 +329,12 @@ public class AdminController {
 							.setNotification(com.google.firebase.messaging.Notification.builder()
 									.setTitle(title)
 									.setBody(body)
+									.build())
+							.setAndroidConfig(com.google.firebase.messaging.AndroidConfig.builder()
+									.setPriority(com.google.firebase.messaging.AndroidConfig.Priority.HIGH)
+									.setNotification(com.google.firebase.messaging.AndroidNotification.builder()
+											.setColor("#FC8019") // 👈 నోటిఫికేషన్ యాసెంట్ కలర్ (ఆరెంజ్)
+											.build())
 									.build())
 							.putData("orderId", String.valueOf(orderId))
 							.putData("status", newStatus)
@@ -353,7 +350,7 @@ public class AdminController {
 		}
 		return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
 	}
-
+	
 	@GetMapping("/all")
 	public ResponseEntity<?> getAllCommissions() {
 		return ResponseEntity.ok(shopCommissionMap);

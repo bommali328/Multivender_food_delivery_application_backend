@@ -343,9 +343,8 @@ public class OrderController {
 	    if (customerMobile != null && !customerMobile.isEmpty()) {
 	        User customer = userRepository.findFirstByMobile(customerMobile); // 👈 Customer బదులుగా User వాడాలి
 	        if (customer != null && customer.getFcmToken() != null && !customer.getFcmToken().isEmpty()) {
-	            String title = "Arriving Shortly";
-	            String body = "Your order #" + orderId + " is " + status.toLowerCase() + "!";
-	            
+	        	String title = "🔥 𝙁𝙤𝙤𝙙𝙞𝙚𝙚 • Order Ready! 🚀";
+	        	String body = "🍔 Your order #" + orderId + " is freshly prepared & ready for delivery! 🎉";
 	            // NotificationService లోని మెథడ్‌ని కాల్ చేయడం
 	            notificationService.sendPushNotificationToCustomer(customer.getFcmToken(), title, body, order.getImageUrl());
 	        }
