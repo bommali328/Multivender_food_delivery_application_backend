@@ -30,7 +30,7 @@ public class Shop {
     private String imageUrl; // మెయిన్ / ప్రైమరీ కవర్ ఇమేజ్
     
     private boolean shopOpen = true;
-    @Column(name = "fcm_token")
+    @Column(name = "fcm_token", length = 512)
     private String fcmToken;
     
     

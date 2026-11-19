@@ -193,28 +193,52 @@ public class ShopController {
 	
 	// 8. షాప్ ఓనర్ FCM టోకెన్ అప్‌డేట్ చేయడానికి (Fixed Path)
 	@PostMapping("/update-fcm-token")
+	public ResponseEntity<?> updateShopFcmToken(@RequestBody Map<String, Object> payload) {
+	    try {
+	        Object rawShopId = payload.get("shopId");
+	        String mobile = payload.get("mobile") != null ? payload.get("mobile").toString().trim() : "";
+	        String fullMobile = payload.get("fullMobile") != null ? payload.get("fullMobile").toString().trim() : "";
+	        String fcmToken = payload.get("fcmToken") != null ? payload.get("fcmToken").toString().trim() : "";
 
-	// 9. ఫుడ్ ఐటెమ్ స్టాటస్ (Available ON/OFF) మార్చడానికి (Fixed Path)
-	@PutMapping("/food/status/{id}")
-    public ResponseEntity<?> updateFoodStockStatus(@PathVariable Long id, @RequestBody Map<String, Boolean> payload) {
-        Optional<MenuItem> foodOpt = menuRepository.findById(id);
-        if (foodOpt.isPresent()) {
-            MenuItem food = foodOpt.get();
-            Boolean available = payload.get("available");
-            
-            if (available != null) {
-                food.setAvailable(available);
-                menuRepository.save(food);
-                
-                // రియల్-టైమ్ సింక్ కోసం వెబ్‌సాకెట్ అలర్ట్
-                messagingTemplate.convertAndSend("/topic/shop/menu-update", food);
-                
-                return ResponseEntity.ok(Map.of("status", "success", "available", food.isAvailable()));
-            }
-            return ResponseEntity.badRequest().body(Map.of("error", "Invalid payload"));
-        }
-        return ResponseEntity.status(404).body(Map.of("error", "Food item not found"));
-    }
+	        if (fcmToken.isEmpty()) {
+	            return ResponseEntity.badRequest().body(Map.of("error", "fcmToken is required"));
+	        }
+
+	        Optional<Shop> shopOpt = Optional.empty();
+	        if (rawShopId != null && !rawShopId.toString().isBlank()) {
+	            Long parsedId = Long.parseLong(rawShopId.toString().trim());
+	            shopOpt = shopRepository.findById(parsedId);
+	        }
+
+	        Shop targetShop = shopOpt.orElse(null);
+	        if (targetShop == null && !fullMobile.isEmpty()) {
+	            targetShop = shopRepository.findByMobile(fullMobile);
+	        }
+	        if (targetShop == null && !mobile.isEmpty()) {
+	            targetShop = shopRepository.findByMobile("+91" + mobile);
+	            if (targetShop == null) {
+	                targetShop = shopRepository.findByMobile(mobile);
+	            }
+	        }
+
+	        if (targetShop == null) {
+	            return ResponseEntity.status(404).body(Map.of("error", "Shop not found for FCM token update"));
+	        }
+
+	        targetShop.setFcmToken(fcmToken);
+	        shopRepository.save(targetShop);
+	        System.out.println("✅ Saved FCM token for Shop ID " + targetShop.getId() + " (" + targetShop.getShopName() + ")");
+
+	        return ResponseEntity.ok(Map.of(
+	            "status", "success",
+	            "shopId", targetShop.getId(),
+	            "message", "Shop FCM token updated successfully"
+	        ));
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        return ResponseEntity.status(500).body(Map.of("error", "Failed to update FCM token: " + e.getMessage()));
+	    }
+	}
 
 	// ==========================================
 	// 🛡️ ADMIN PANEL ENDPOINTS
