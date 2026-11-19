@@ -158,72 +158,110 @@ public class AdminController {
 		}
 	}
 
-		@PostMapping("/admin/broadcast")
-		public ResponseEntity<?> sendBroadcast(
-				@RequestParam("target") String target,
-				@RequestParam(value = "title", defaultValue = "📢 Foodiee Announcement") String title,
-				@RequestParam("message") String message,
-				@RequestParam(value = "image", required = false) MultipartFile image) {
-			try {
-				String imageUrl = null;
-				if (image != null && !image.isEmpty()) {
-					imageUrl = "https://api.foodiee.shop/uploaded_images/" + image.getOriginalFilename();
-				}
-
-				Map<String, Object> payload = new HashMap<>();
-				payload.put("title", title);
-				payload.put("message", message);
-				payload.put("imageUrl", imageUrl);
-
-				if ("All Users".equalsIgnoreCase(target)) {
-					messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
-					messagingTemplate.convertAndSend("/topic/broadcast/shops", payload);
-					messagingTemplate.convertAndSend("/topic/broadcast/partners", payload);
-				} else if ("All Delivery Partners".equalsIgnoreCase(target)) {
-					messagingTemplate.convertAndSend("/topic/broadcast/partners", payload);
-				} else if ("All Shop Owners".equalsIgnoreCase(target)) {
-					messagingTemplate.convertAndSend("/topic/broadcast/shops", payload);
-				} else if ("All Customers".equalsIgnoreCase(target) || "All Users".equalsIgnoreCase(target)) {
-					messagingTemplate.convertAndSend("/topic/broadcast/customers", payload);
-					
-					List<User> customers = userRepository.findAll();
-					for (User customer : customers) {
-						if (customer.getFcmToken() != null && !customer.getFcmToken().isEmpty() && firebaseMessaging != null) {
-							try {
-								com.google.firebase.messaging.Message.Builder msgBuilder = com.google.firebase.messaging.Message.builder()
-										.setToken(customer.getFcmToken())
-										.setNotification(com.google.firebase.messaging.Notification.builder()
-												.setTitle(title)
-												.setBody(message)
-												.setImage(imageUrl) // 👈 బిగ్ పిక్చర్ ఇమేజ్
-												.build())
-										.setAndroidConfig(com.google.firebase.messaging.AndroidConfig.builder()
-												.setPriority(com.google.firebase.messaging.AndroidConfig.Priority.HIGH)
-												.setNotification(com.google.firebase.messaging.AndroidNotification.builder()
-														.setColor("#FC8019") // 👈 ఆరెంజ్ కలర్
-														.build())
-												.build())
-										.putData("image", imageUrl != null ? imageUrl : "")
-										.putData("title", title)
-										.putData("message", message);
-								
-								firebaseMessaging.send(msgBuilder.build());
-							} catch (Exception e) {
-								System.err.println("FCM Push Error for customer: " + e.getMessage());
-							}
-						}
-					}
-				} else {
-					messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
-				}
-
-				return ResponseEntity.ok(Map.of("status", "success", "message", "Broadcast sent successfully"));
-
-			} catch (Exception e) {
-				System.err.println("Broadcast Error: " + e.getMessage());
-				return ResponseEntity.status(500).body(Map.of("status", "error", "message", e.getMessage()));
+	@PostMapping("/admin/broadcast")
+	public ResponseEntity<?> sendBroadcast(
+			@RequestParam("target") String target,
+			@RequestParam(value = "title", defaultValue = "📢 Foodiee Announcement") String title,
+			@RequestParam("message") String message,
+			@RequestParam(value = "image", required = false) MultipartFile image) {
+		try {
+			String imageUrl = null;
+			if (image != null && !image.isEmpty()) {
+				imageUrl = "https://api.foodiee.shop/uploaded_images/" + image.getOriginalFilename();
 			}
+
+			Map<String, Object> payload = new HashMap<>();
+			payload.put("title", title);
+			payload.put("message", message);
+			payload.put("imageUrl", imageUrl);
+
+			boolean isAllUsers = "All Users".equalsIgnoreCase(target);
+			boolean sendToCustomers = "All Customers".equalsIgnoreCase(target) || isAllUsers;
+			boolean sendToShops = "All Shop Owners".equalsIgnoreCase(target) || "All Shops".equalsIgnoreCase(target) || isAllUsers;
+			boolean sendToPartners = "All Delivery Partners".equalsIgnoreCase(target) || isAllUsers;
+
+			if (firebaseMessaging == null) {
+				System.err.println("❌ FirebaseMessaging bean is NULL! Check serviceAccountKey.json initialization.");
+			}
+
+			// 1. Customers కి WebSocket + FCM Push
+			if (sendToCustomers) {
+				messagingTemplate.convertAndSend("/topic/broadcast/customers", payload);
+				messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
+
+				if (firebaseMessaging != null) {
+					for (User customer : userRepository.findAll()) {
+						sendFcmToToken(customer.getFcmToken(), "Customer (" + customer.getMobile() + ")", title, message, imageUrl);
+					}
+				}
+			}
+
+			// 2. Shops కి WebSocket + FCM Push
+			if (sendToShops) {
+				messagingTemplate.convertAndSend("/topic/broadcast/shops", payload);
+				if (isAllUsers) {
+					messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
+				}
+
+				if (firebaseMessaging != null) {
+					for (Shop shop : shopRepository.findAll()) {
+						sendFcmToToken(shop.getFcmToken(), "Shop (" + shop.getId() + " - " + shop.getShopName() + ")", title, message, imageUrl);
+					}
+				}
+			}
+
+			// 3. Delivery Partners కి WebSocket
+			if (sendToPartners) {
+				messagingTemplate.convertAndSend("/topic/broadcast/partners", payload);
+			}
+
+			if (!sendToCustomers && !sendToShops && !sendToPartners) {
+				messagingTemplate.convertAndSend("/topic/broadcast/all", payload);
+			}
+
+			return ResponseEntity.ok(Map.of("status", "success", "message", "Broadcast sent successfully"));
+
+		} catch (Exception e) {
+			System.err.println("Broadcast Error: " + e.getMessage());
+			return ResponseEntity.status(500).body(Map.of("status", "error", "message", e.getMessage()));
 		}
+	}
+
+	private void sendFcmToToken(String token, String label, String title, String message, String imageUrl) {
+		if (token == null || token.trim().isEmpty() || firebaseMessaging == null) {
+			return;
+		}
+		try {
+			com.google.firebase.messaging.Notification.Builder notifBuilder =
+					com.google.firebase.messaging.Notification.builder()
+							.setTitle(title)
+							.setBody(message);
+			if (imageUrl != null && !imageUrl.isBlank()) {
+				notifBuilder.setImage(imageUrl);
+			}
+
+			com.google.firebase.messaging.Message fcmMsg =
+					com.google.firebase.messaging.Message.builder()
+							.setToken(token.trim())
+							.setNotification(notifBuilder.build())
+							.setAndroidConfig(com.google.firebase.messaging.AndroidConfig.builder()
+									.setPriority(com.google.firebase.messaging.AndroidConfig.Priority.HIGH)
+									.setNotification(com.google.firebase.messaging.AndroidNotification.builder()
+											.setColor("#FC8019")
+											.setChannelId("foodie_orders")
+											.build())
+									.build())
+							.putData("image", imageUrl != null ? imageUrl : "")
+							.putData("title", title)
+							.putData("message", message)
+							.build();
+
+			String responseId = firebaseMessaging.send(fcmMsg);
+			System.out.println("✅ FCM sent to " + label + " -> " + responseId);
+		} catch (Exception e) {
+			System.err.println("❌ FCM Push Error for " + label + ": " + e.getMessage());
+		}
+	}
 
 	@PostMapping("/set")
 	public ResponseEntity<?> setShopCommission(@RequestBody Map<String, Object> payload) {

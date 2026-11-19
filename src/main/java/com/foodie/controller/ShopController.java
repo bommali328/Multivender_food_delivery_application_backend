@@ -32,7 +32,7 @@ public class ShopController {
 	private ShopService shopService;
 	
 	@Autowired
-    private com.foodie.repository.MenuRepository menuRepository; // 👈 ఇక్కడ డిక్లేర్ చేయాలి
+    private com.foodie.repository.MenuRepository menuRepository;
 
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
@@ -140,7 +140,7 @@ public class ShopController {
 				directory.mkdirs();
 			}
 
-			// మెయిన్ కవర్ ఇమేజ్ సేవ్ చేయడం
+			// మెయిನ್ కవర్ ఇమేజ్ సేవ్ చేయడం
 			if (mainImage != null && !mainImage.isEmpty()) {
 				String mainFileName = System.currentTimeMillis() + "_" + mainImage.getOriginalFilename();
 				Path mainPath = Paths.get(UPLOAD_DIR + mainFileName);
@@ -174,62 +174,53 @@ public class ShopController {
 		}
 	}
 	
-	// 8. షాప్ ఓపెన్ లేదా క్లోజ్ స్టేటస్ మార్చడానికి (Toggle Shop Open/Close)
-		@PutMapping("/status/toggle/{id}")
-		public ResponseEntity<?> toggleShopOpenStatus(@PathVariable Long id, @RequestParam boolean shopOpen) {
-			Optional<Shop> shopOpt = shopRepository.findById(id);
-			if (shopOpt.isPresent()) {
-				Shop shop = shopOpt.get();
-				shop.setShopOpen(shopOpen); // Shop model లో ఉన్న setter
-				shopRepository.save(shop);
-				return ResponseEntity.ok(Map.of(
-					"status", "success", 
-					"message", "Shop open status updated successfully",
-					"shopOpen", shop.isShopOpen()
-				));
-			}
-			return ResponseEntity.status(404).body("Shop not found");
+	// 7. షాప్ ఓపెన్ లేదా క్లోజ్ స్టేటస్ మార్చడానికి (Toggle Shop Open/Close)
+	@PutMapping("/status/toggle/{id}")
+	public ResponseEntity<?> toggleShopOpenStatus(@PathVariable Long id, @RequestParam boolean shopOpen) {
+		Optional<Shop> shopOpt = shopRepository.findById(id);
+		if (shopOpt.isPresent()) {
+			Shop shop = shopOpt.get();
+			shop.setShopOpen(shopOpen);
+			shopRepository.save(shop);
+			return ResponseEntity.ok(Map.of(
+				"status", "success", 
+				"message", "Shop open status updated successfully",
+				"shopOpen", shop.isShopOpen()
+			));
 		}
-		
-		@PostMapping("/shop/update-fcm-token")
-		public ResponseEntity<?> updateShopFcmToken(@RequestBody Map<String, String> payload) {
-		    String mobile = payload.get("mobile");
-		    String fcmToken = payload.get("fcmToken");
-		    
-		    Shop shop = shopRepository.findByMobile(mobile);
-		    if (shop != null) {
-		        shop.setFcmToken(fcmToken);
-		        shopRepository.save(shop);
-		        return ResponseEntity.ok(Map.of("status", "success", "message", "Shop FCM token updated"));
-		    }
-		    return ResponseEntity.status(404).body(Map.of("error", "Shop not found"));
-		}
+		return ResponseEntity.status(404).body("Shop not found");
+	}
+	
+	// 8. షాప్ ఓనర్ FCM టోకెన్ అప్‌డేట్ చేయడానికి (Fixed Path)
+	@PostMapping("/update-fcm-token")
 
-		@PutMapping("/api/food/status/{id}")
-	    public ResponseEntity<?> updateFoodStockStatus(@PathVariable Long id, @RequestBody Map<String, Boolean> payload) {
-	        Optional<MenuItem> foodOpt = menuRepository.findById(id);
-	        if (foodOpt.isPresent()) {
-	            MenuItem food = foodOpt.get();
-	            Boolean available = payload.get("available");
-	            
-	            if (available != null) {
-	                food.setAvailable(available);
-	                menuRepository.save(food);
-	                
-	                // రియల్-టైమ్ సింక్ కోసం వెబ్‌సాకెట్ అలర్ట్
-	                messagingTemplate.convertAndSend("/topic/shop/menu-update", food);
-	                
-	                return ResponseEntity.ok(Map.of("status", "success", "available", food.isAvailable()));
-	            }
-	            return ResponseEntity.badRequest().body(Map.of("error", "Invalid payload"));
-	        }
-	        return ResponseEntity.status(404).body(Map.of("error", "Food item not found"));
-	    }
+	// 9. ఫుడ్ ఐటెమ్ స్టాటస్ (Available ON/OFF) మార్చడానికి (Fixed Path)
+	@PutMapping("/food/status/{id}")
+    public ResponseEntity<?> updateFoodStockStatus(@PathVariable Long id, @RequestBody Map<String, Boolean> payload) {
+        Optional<MenuItem> foodOpt = menuRepository.findById(id);
+        if (foodOpt.isPresent()) {
+            MenuItem food = foodOpt.get();
+            Boolean available = payload.get("available");
+            
+            if (available != null) {
+                food.setAvailable(available);
+                menuRepository.save(food);
+                
+                // రియల్-టైమ్ సింక్ కోసం వెబ్‌సాకెట్ అలర్ట్
+                messagingTemplate.convertAndSend("/topic/shop/menu-update", food);
+                
+                return ResponseEntity.ok(Map.of("status", "success", "available", food.isAvailable()));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid payload"));
+        }
+        return ResponseEntity.status(404).body(Map.of("error", "Food item not found"));
+    }
+
 	// ==========================================
 	// 🛡️ ADMIN PANEL ENDPOINTS
 	// ==========================================
 
-	// 7. అడ్మిన్ ప్యానెల్ కోసం: షాప్ యాక్టివ్ / డియాక్టివ్ స్టేటస్ మార్చడానికి
+	// 10. అడ్మిన్ ప్యానెల్ కోసం: షాప్ యాక్టివ్ / డియాక్టివ్ స్టేటస్ మార్చడానికి
 	@PutMapping("/admin/status/{id}")
 	public ResponseEntity<?> adminToggleShopStatus(@PathVariable Long id, @RequestParam boolean active) {
 		Optional<Shop> shopOpt = shopRepository.findById(id);
@@ -242,6 +233,4 @@ public class ShopController {
 		}
 		return ResponseEntity.status(404).body("Shop not found");
 	}
-	
 }
-

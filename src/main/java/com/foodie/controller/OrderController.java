@@ -19,12 +19,10 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
-
 @RestController
 @RequestMapping("/api/orders")
 @CrossOrigin(origins = "*")
 public class OrderController {
-	
 
 	@Autowired
 	private OrderRepository orderRepository;
@@ -39,22 +37,20 @@ public class OrderController {
 	private SimpMessagingTemplate messagingTemplate;
 
 	@Autowired
-	private WhatsAppNotificationService whatsAppNotificationService; 
+	private WhatsAppNotificationService whatsAppNotificationService;
 	// వాట్సాప్ సర్వీస్ ఆటో-వైరింగ్
-	
+
 	@Autowired
 	private CustomerRepository customerRepository;
 
 	@Autowired
 	private NotificationService notificationService;
-	
+
 	@Autowired
-    private FirebaseMessagingService firebaseMessagingService;
-	
+	private FirebaseMessagingService firebaseMessagingService;
+
 	@Autowired
 	private OrderService orderAssignmentService;
-	
-
 
 	@Autowired
 	private com.foodie.repository.ShopRepository shopRepository; // షాప్ పేరు కరెక్ట్‌గా తెచ్చుకోవడానికి
@@ -62,11 +58,11 @@ public class OrderController {
 	// కొత్త ఆర్డర్ క్రియేట్ చేయడానికి / ప్లేస్ చేయడానికి (POST API)
 	@PostMapping({ "/create", "/place" })
 	public ResponseEntity<Order> createOrder(@RequestBody Order order) {
-		
+
 		// 🛡️ 1. డెలివరీ అడ్రస్ లేకపోతే (Null లేదా Empty అయితే) ఆర్డర్ రిజెక్ట్ చేయడం
 		if (order.getDeliveryAddress() == null || order.getDeliveryAddress().trim().isEmpty()) {
 			System.err.println("❌ Order Creation Failed: Delivery Address is missing!");
-			return ResponseEntity.status(400).body(null); 
+			return ResponseEntity.status(400).body(null);
 		}
 
 		if (order.getStatus() == null) {
@@ -98,39 +94,38 @@ public class OrderController {
 		}
 
 		// 3. మొదటి ఆర్డర్ అయితే డెలివరీ ఫీజు ఫ్రీ చేయడం, లేదంటే దూరం (Distance) బట్టి ఫీజు క్యాలెక్యులేట్ చేయడం
-				String customerMobile = order.getCustomerMobile();
-				long previousOrdersCount = orderRepository.countByCustomerMobile(customerMobile);
-				
-				if (previousOrdersCount == 0) {
-					order.setDeliveryFee(0.0);
-				} else {
-					// 📐 షాప్ మరియు కస్టమర్ మధ్య దూరం (Distance) ఆధారంగా డెలివరీ ఫీజు లెక్కించడం
-					double shopLat = order.getShopLat();
-					double shopLng = order.getShopLng();
-					double customerLat = order.getCustomerLat();
-					double customerLng = order.getCustomerLng();
+		String customerMobile = order.getCustomerMobile();
+		long previousOrdersCount = orderRepository.countByCustomerMobile(customerMobile);
 
-					if (shopLat != 0.0 && shopLng != 0.0 && customerLat != 0.0 && customerLng != 0.0) {
-						double earthRadius = 6371; // కిలోమీటర్లలో భూమి వ్యాసార్థం
-						double dLat = Math.toRadians(customerLat - shopLat);
-						double dLon = Math.toRadians(customerLng - shopLng);
-						double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-						           Math.cos(Math.toRadians(shopLat)) * Math.cos(Math.toRadians(customerLat)) *
-						           Math.sin(dLon / 2) * Math.sin(dLon / 2);
-						double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-						double distanceKm = earthRadius * c;
+		if (previousOrdersCount == 0) {
+			order.setDeliveryFee(0.0);
+		} else {
+			// 📐 షాప్ మరియు కస్టమర్ మధ్య దూరం (Distance) ఆధారంగా డెలివరీ ఫీజు లెక్కించడం
+			double shopLat = order.getShopLat();
+			double shopLng = order.getShopLng();
+			double customerLat = order.getCustomerLat();
+			double customerLng = order.getCustomerLng();
 
-						// 💰 ఫీజు లాజిక్: 2 కి.మీ వరకు రూ. 20, ఆపై ప్రతి అదనపు కిమీకి రూ. 10 అదనం
-						double calculatedFee = 20.0;
-						if (distanceKm > 2.0) {
-							calculatedFee = 20.0 + Math.ceil(distanceKm - 2.0) * 10.0;
-						}
-						order.setDeliveryFee(calculatedFee);
-					} else {
-						order.setDeliveryFee(20.0); // డిఫాల్ట్ ఫీజు
-					}
+			if (shopLat != 0.0 && shopLng != 0.0 && customerLat != 0.0 && customerLng != 0.0) {
+				double earthRadius = 6371; // కిలోమీటర్లలో భూమి వ్యాసార్థం
+				double dLat = Math.toRadians(customerLat - shopLat);
+				double dLon = Math.toRadians(customerLng - shopLng);
+				double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+						+ Math.cos(Math.toRadians(shopLat)) * Math.cos(Math.toRadians(customerLat))
+								* Math.sin(dLon / 2) * Math.sin(dLon / 2);
+				double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+				double distanceKm = earthRadius * c;
+
+				// 💰 ఫీజు లాజిక్: 2 కి.మీ వరకు రూ. 20, ఆపై ప్రతి అదనపు కిమీకి రూ. 10 అదనం
+				double calculatedFee = 20.0;
+				if (distanceKm > 2.0) {
+					calculatedFee = 20.0 + Math.ceil(distanceKm - 2.0) * 10.0;
 				}
-		
+				order.setDeliveryFee(calculatedFee);
+			} else {
+				order.setDeliveryFee(20.0); // డిఫాల్ట్ ఫీజు
+			}
+		}
 
 		// 4. ప్రోమో కోడ్ వాలిడేషన్
 		String promoCode = order.getPromoCode();
@@ -140,50 +135,61 @@ public class OrderController {
 
 			boolean alreadyUsed = orderRepository.existsByCustomerMobileAndPromoCode(customerMobile, cleanPromo);
 			if (alreadyUsed) {
-				return ResponseEntity.status(400).body(null); 
+				return ResponseEntity.status(400).body(null);
 			}
 		}
 
 		// 5. 4-అంకెల డెలివరీ OTP ఆటోమేటిక్‌గా క్రియేట్ అవ్వడం
 		if (order.getDeliveryOtp() == null || order.getDeliveryOtp().trim().isEmpty()) {
-			String randomOtp = String.format("%04d", (int)(Math.random() * 10000));
+			String randomOtp = String.format("%04d", (int) (Math.random() * 10000));
 			order.setDeliveryOtp(randomOtp);
 		}
 
 		// 6. ఆర్డర్‌ని డేటాబేస్‌లో సేవ్ చేయడం
 		Order savedOrder = orderRepository.save(order);
-		
+
 		System.out.println("📌 [DEBUG] Order Saved Successfully with ID: " + savedOrder.getId());
 		System.out.println("📌 [DEBUG] Customer Mobile: " + savedOrder.getCustomerMobile());
 		System.out.println("📌 [DEBUG] Shop Name: " + savedOrder.getShopName());
 		System.out.println("📌 [DEBUG] Delivery Address: " + savedOrder.getDeliveryAddress());
 
-		
-		// ========================================================
-				// 📱 వాట్సాప్ ఆటోమేటిక్ నోటిఫికేషన్స్ & OTP పంపడం (Async Background Call)
-				// ========================================================
-				try {
-				    // ఇక్కడ మెసేజ్ పంపే పనులు అన్నీ @Async ద్వారా బ్యాక్‌గ్రౌండ్‌లో రన్ అవుతాయి కాబట్టి ఆర్డర్ ఇన్‌స్టెంట్‌గా సక్సెస్ అవుతుంది
-				    whatsAppNotificationService.sendOrderConfirmationToWhatsApp(
-				        savedOrder.getCustomerMobile(),
-				        savedOrder.getId(),
-				        savedOrder.getShopName(), 
-				        savedOrder.getItems(), 
-				        savedOrder.getDeliveryAddress(),
-				        savedOrder.getTotalAmount(),
-				        savedOrder.getTransactionId()
-				    );
+		// కస్టమర్‌కి ఆర్డర్ ప్లేస్ అయిన పుష్ నోటిఫికేషన్ పంపడం
+		try {
+			notificationService.sendOrderStatusNotification(
+					savedOrder.getId(),
+					savedOrder.getCustomerMobile(),
+					savedOrder.getStatus(),
+					savedOrder.getImageUrl()
+			);
+		} catch (Exception e) {
+			System.err.println("Customer order placed push error: " + e.getMessage());
+		}
 
-				    if (savedOrder.getDeliveryOtp() != null) {
-				        whatsAppNotificationService.sendOtpToWhatsApp(
-				            savedOrder.getCustomerMobile(),
-				            savedOrder.getDeliveryOtp(),
-				            savedOrder.getId()
-				        );
-				    }
-				} catch (Exception e) {
-				    System.err.println("WhatsApp background trigger warning: " + e.getMessage());
-				}
+		// ========================================================
+		// 📱 వాట్సాప్ ఆటోమేటిక్ నోటిఫికేషన్స్ & OTP పంపడం (Async Background Call)
+		// ========================================================
+		try {
+			// ఇక్కడ మెసేజ్ పంపే పనులు అన్నీ @Async ద్వారా బ్యాక్‌గ్రౌండ్‌లో రన్ అవుతాయి కాబట్టి ఆర్డర్ ఇన్‌స్టెంట్‌గా సక్సెస్ అవుతుంది
+			whatsAppNotificationService.sendOrderConfirmationToWhatsApp(
+					savedOrder.getCustomerMobile(),
+					savedOrder.getId(),
+					savedOrder.getShopName(),
+					savedOrder.getItems(),
+					savedOrder.getDeliveryAddress(),
+					savedOrder.getTotalAmount(),
+					savedOrder.getTransactionId()
+			);
+
+			if (savedOrder.getDeliveryOtp() != null) {
+				whatsAppNotificationService.sendOtpToWhatsApp(
+						savedOrder.getCustomerMobile(),
+						savedOrder.getDeliveryOtp(),
+						savedOrder.getId()
+				);
+			}
+		} catch (Exception e) {
+			System.err.println("WhatsApp background trigger warning: " + e.getMessage());
+		}
 
 		// ========================================================
 		// 🚀 SMART 1-BY-1 DELIVERY PARTNER ASSIGNMENT
@@ -198,11 +204,21 @@ public class OrderController {
 		if (savedOrder.getShopId() != null) {
 			messagingTemplate.convertAndSend("/topic/shop/" + savedOrder.getShopId(), savedOrder);
 			messagingTemplate.convertAndSend("/topic/shop/orders/" + savedOrder.getShopId(), savedOrder);
+
+			// 🌟 షాప్ ఓనర్ యాప్ క్లోజ్ చేసినా/మినిమైజ్ చేసినా FCM పుష్ నోటిఫికేషన్ పంపడానికి:
+			com.foodie.model.Shop shop = shopRepository.findById(savedOrder.getShopId()).orElse(null);
+			if (shop != null && shop.getFcmToken() != null && !shop.getFcmToken().isEmpty()) {
+				String shopTitle = "🔔 𝙁𝙤𝙤𝙙𝙞𝙚𝙚 • New Order Received! 🚀";
+				String shopBody = "📦 Order #" + (savedOrder.getOrderId() != null ? savedOrder.getOrderId() : savedOrder.getId()) + " has arrived! Tap to accept.";
+
+				// కస్టమర్‌కి వాడినట్టే నోటిఫికేషన్ సర్వీస్‌ని ఉపయోగించి షాప్ ఓనర్‌కి పంపడం
+				notificationService.sendPushNotificationToCustomer(shop.getFcmToken(), shopTitle, shopBody, savedOrder.getImageUrl());
+			}
 		}
 
 		return ResponseEntity.ok(savedOrder);
 	}
-	
+
 	// కస్టమర్ మొబైల్ నంబర్ ఆధారంగా ఆర్డర్ హిస్టరీ చూడటానికి (GET API)
 	@GetMapping("/customer/{mobile}")
 	public ResponseEntity<List<Order>> getOrdersByCustomer(@PathVariable String mobile) {
@@ -216,7 +232,7 @@ public class OrderController {
 		List<Order> partnerOrders = orderRepository.findByDeliveryPartnerId(partnerId);
 		return ResponseEntity.ok(partnerOrders);
 	}
-	
+
 	// షాప్ ఐడీ ఆధారంగా ఆర్డర్స్ ఫెచ్ చేయడానికి
 	@GetMapping("/shop/{shopId}")
 	public ResponseEntity<List<Order>> getOrdersByShop(@PathVariable Long shopId) {
@@ -233,27 +249,34 @@ public class OrderController {
 
 	@PostMapping("/accept/{id}")
 	public ResponseEntity<Order> acceptOrder(@PathVariable Long id,
-	        @RequestBody(required = false) Order deliveryPayload) {
-	    Order order = orderRepository.findById(id).orElse(null);
-	    if (order != null) {
-	        // 🔴 స్టేటస్‌ను స్పష్టంగా ACCEPTED అని మార్చాలి
-	        order.setStatus("ACCEPTED");
-	        
-	        if (deliveryPayload != null) {
-	            if (deliveryPayload.getDeliveryFee() > 0) {
-	                order.setDeliveryFee(deliveryPayload.getDeliveryFee());
-	            }
-	            if (deliveryPayload.getDeliveryPartnerId() != null) {
-	                order.setDeliveryPartnerId(deliveryPayload.getDeliveryPartnerId());
-	            }
-	        }
-	        
-	        Order updatedOrder = orderRepository.save(order);
-	        return ResponseEntity.ok(updatedOrder);
-	    }
-	    return ResponseEntity.notFound().build();
+			@RequestBody(required = false) Order deliveryPayload) {
+		Order order = orderRepository.findById(id).orElse(null);
+		if (order != null) {
+			// 🔴 స్టేటస్‌ను స్పష్టంగా ACCEPTED అని మార్చాలి
+			order.setStatus("ACCEPTED");
+
+			if (deliveryPayload != null) {
+				if (deliveryPayload.getDeliveryFee() > 0) {
+					order.setDeliveryFee(deliveryPayload.getDeliveryFee());
+				}
+				if (deliveryPayload.getDeliveryPartnerId() != null) {
+					order.setDeliveryPartnerId(deliveryPayload.getDeliveryPartnerId());
+				}
+			}
+
+			Order updatedOrder = orderRepository.save(order);
+			messagingTemplate.convertAndSend("/topic/order/status/" + id, "ACCEPTED");
+			notificationService.sendOrderStatusNotification(
+					updatedOrder.getId(),
+					updatedOrder.getCustomerMobile(),
+					"ACCEPTED",
+					updatedOrder.getImageUrl()
+			);
+			return ResponseEntity.ok(updatedOrder);
+		}
+		return ResponseEntity.notFound().build();
 	}
-	
+
 	@GetMapping("/customer-history/{mobile}")
 	public ResponseEntity<?> getCustomerOrderHistory(@PathVariable String mobile) {
 		try {
@@ -265,23 +288,24 @@ public class OrderController {
 	}
 
 	// ✅ డెలివరీ యాప్ ఆటో-పోలింగ్ కోసం పెండింగ్ ఆర్డర్స్ బ్యాకప్ API (Fixed)
-		@GetMapping("/pending-delivery/{partnerId}")
-		public ResponseEntity<List<Order>> getPendingDeliveriesForPartner(@PathVariable Long partnerId) {
-		    try {
-		        List<Order> pendingOrders = orderRepository.findAll()
-		            .stream()
-		            .filter(o -> partnerId.equals(o.getDeliveryPartnerId()) 
-		                && ("Pending".equalsIgnoreCase(o.getStatus()) 
-		                    || "Ready".equalsIgnoreCase(o.getStatus()) 
-		                    || "Pending Approval".equalsIgnoreCase(o.getStatus()) 
-		                    || "Assigned".equalsIgnoreCase(o.getStatus()) 
-		                    || "Accepted by Delivery Partner".equalsIgnoreCase(o.getStatus())))
-		            .toList();
-		        return ResponseEntity.ok(pendingOrders);
-		    } catch (Exception e) {
-		        return ResponseEntity.ok(List.of());
-		    }
+	@GetMapping("/pending-delivery/{partnerId}")
+	public ResponseEntity<List<Order>> getPendingDeliveriesForPartner(@PathVariable Long partnerId) {
+		try {
+			List<Order> pendingOrders = orderRepository.findAll()
+					.stream()
+					.filter(o -> partnerId.equals(o.getDeliveryPartnerId())
+							&& ("Pending".equalsIgnoreCase(o.getStatus())
+									|| "Ready".equalsIgnoreCase(o.getStatus())
+									|| "Pending Approval".equalsIgnoreCase(o.getStatus())
+									|| "Assigned".equalsIgnoreCase(o.getStatus())
+									|| "Accepted by Delivery Partner".equalsIgnoreCase(o.getStatus())))
+					.toList();
+			return ResponseEntity.ok(pendingOrders);
+		} catch (Exception e) {
+			return ResponseEntity.ok(List.of());
 		}
+	}
+
 	// డెలివరీ కంప్లీట్ చేయడానికి OTP వెరిఫై చేసే API (POST API)
 	@PostMapping("/verify-delivery/{id}")
 	public ResponseEntity<?> verifyAndCompleteDelivery(@PathVariable Long id, @RequestBody Map<String, String> payload) {
@@ -295,61 +319,62 @@ public class OrderController {
 
 		if (enteredOtp != null && enteredOtp.equals(order.getDeliveryOtp())) {
 			order.setStatus("Delivered");
-			
+
 			if (partnerIdStr != null && !partnerIdStr.isEmpty()) {
 				order.setDeliveryPartnerId(Long.valueOf(partnerIdStr));
 			}
-			
+
 			orderRepository.save(order);
-			
+
 			messagingTemplate.convertAndSend("/topic/order/status/" + id, "Delivered");
+			notificationService.sendOrderStatusNotification(
+					order.getId(),
+					order.getCustomerMobile(),
+					"Delivered",
+					order.getImageUrl()
+			);
 
 			return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Delivery completed successfully!"));
 		} else {
 			return ResponseEntity.badRequest().body(Map.of("status", "FAILED", "message", "Invalid Delivery OTP!"));
 		}
 	}
-	
+
 	@PostMapping("/decline/{id}")
 	public ResponseEntity<?> declineOrder(@PathVariable Long id, @RequestBody Map<String, Long> payload) {
-	    Order order = orderRepository.findById(id).orElse(null);
-	    if (order != null) {
-	        // Decline chesinappudu delivery partner assignment ni remove cheyali
-	        order.setDeliveryPartnerId(null);
-	        order.setStatus("Declined");
-	        orderRepository.save(order);
-	        return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Order declined successfully"));
-	    }
-	    return ResponseEntity.status(404).body("Order not found");
+		Order order = orderRepository.findById(id).orElse(null);
+		if (order != null) {
+			// Decline chesinappudu delivery partner assignment ni remove cheyali
+			order.setDeliveryPartnerId(null);
+			order.setStatus("Declined");
+			orderRepository.save(order);
+			return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Order declined successfully"));
+		}
+		return ResponseEntity.status(404).body("Order not found");
 	}
-	
-	
+
 	// ఆర్డర్ స్టేటస్ అప్‌డేట్ చేయడానికి మరియు కస్టమర్‌కి పుష్ నోటిఫికేషన్ పంపడానికి (PUT API)
-	@PutMapping({"/status/{orderId}", "/update-status/{orderId}"})
+	@PutMapping({ "/status/{orderId}", "/update-status/{orderId}" })
 	public ResponseEntity<?> updateOrderStatus(@PathVariable Long orderId, @RequestParam String status) {
-	    Order order = orderRepository.findById(orderId).orElse(null);
-	    if (order == null) {
-	        return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
-	    }
+		Order order = orderRepository.findById(orderId).orElse(null);
+		if (order == null) {
+			return ResponseEntity.status(404).body(Map.of("error", "Order not found"));
+		}
 
-	    order.setStatus(status); // ఉదాహరణకు: "Out for Delivery"
-	    orderRepository.save(order);
+		order.setStatus(status); // ఉదాహరణకు: "Out for Delivery"
+		orderRepository.save(order);
 
-	    // వెబ్‌సాకెట్ ద్వారా రియల్-టైమ్ అప్‌డేట్ పంపడం
-	    messagingTemplate.convertAndSend("/topic/order/status/" + orderId, status);
+		// వెబ్‌సాకెట్ ద్వారా రియల్-టైమ్ అప్‌డేట్ పంపడం
+		messagingTemplate.convertAndSend("/topic/order/status/" + orderId, status);
 
-	    // 🌟 కస్టమర్‌కి ఆటోమేటిక్‌గా పుష్ నోటిఫికేషన్ పంపడం (UserRepository ఉపయోగించి)
-	    String customerMobile = order.getCustomerMobile();
-	    if (customerMobile != null && !customerMobile.isEmpty()) {
-	        User customer = userRepository.findFirstByMobile(customerMobile); // 👈 Customer బదులుగా User వాడాలి
-	        if (customer != null && customer.getFcmToken() != null && !customer.getFcmToken().isEmpty()) {
-	        	String title = "🔥 𝙁𝙤𝙤𝙙𝙞𝙚𝙚 • Order Ready! 🚀";
-	        	String body = "🍔 Your order #" + orderId + " is freshly prepared & ready for delivery! 🎉";
-	            // NotificationService లోని మెథడ్‌ని కాల్ చేయడం
-	            notificationService.sendPushNotificationToCustomer(customer.getFcmToken(), title, body, order.getImageUrl());
-	        }
-	    }
+		// 🌟 స్టేటస్‌కి తగ్గట్టు కస్టమర్‌కి పుష్ నోటిఫికేషన్ పంపడం
+		notificationService.sendOrderStatusNotification(
+				orderId,
+				order.getCustomerMobile(),
+				status,
+				order.getImageUrl()
+		);
 
-	    return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Order status updated & notification sent"));
+		return ResponseEntity.ok(Map.of("status", "SUCCESS", "message", "Order status updated & notification sent"));
 	}
 }
